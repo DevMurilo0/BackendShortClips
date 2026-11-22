@@ -144,7 +144,8 @@ class handler(BaseHTTPRequestHandler):
                     job = asyncio.run(sandbox_engine.get_job(match.group(1)))
                 if job is None:
                     return self.send_json(404, {"error":"Tarefa não encontrada."})
-                return self.send_json(200, {"job":job})
+                # /latest tem envelope; /jobs/id devolve estado direto (contrato da UI local).
+                return self.send_json(200, {"job":job} if path == "/api/jobs/latest" else job)
             except Exception:
                 return self.send_json(502, {"error":"Não foi possível acessar o estado dos vídeos."})
         if path.startswith("/downloads/"):

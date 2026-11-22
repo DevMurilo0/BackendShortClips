@@ -1,0 +1,2 @@
+# Operator-only helpers. Never included in the HTTP or worker runtime.
+python-dotenv==1.2.2

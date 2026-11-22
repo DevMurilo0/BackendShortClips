@@ -1,0 +1,29 @@
+{
+  "production": {
+    "persistent_variables_unchanged": true,
+    "names": [
+      "BLOB_READ_WRITE_TOKEN",
+      "BLOB_STORE_ID",
+      "BLOB_WEBHOOK_PUBLIC_KEY",
+      "CRON_SECRET",
+      "SHORTFORGE_FRONTEND_ORIGIN",
+      "SHORTFORGE_MAX_JOBS_MONTH",
+      "SHORTFORGE_PUBLIC_ACCESS_KEY",
+      "SHORTFORGE_PUBLIC_API_URL",
+      "SHORTFORGE_WORKER_SECRET"
+    ]
+  },
+  "preview": {
+    "persistent_variables_unchanged": true,
+    "names": [
+      "BLOB_READ_WRITE_TOKEN",
+      "BLOB_STORE_ID",
+      "BLOB_WEBHOOK_PUBLIC_KEY"
+    ]
+  },
+  "production_health": {
+    "ok": true,
+    "mode": "gateway",
+    "ready": false
+  }
+}

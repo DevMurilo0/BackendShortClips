@@ -1,4 +1,3 @@
-# Runtime leve da API — FFmpeg/Whisper nunca entram na Function HTTP.
-# Instale os SDKs apenas quando ativar SHORTFORGE_ENGINE=sandbox.
-vercel-sandbox
-vercel-blob
+# HTTP runtime only; media dependencies stay inside the Sandbox.
+vercel-sandbox==1.1.0
+vercel-blob==0.6.2

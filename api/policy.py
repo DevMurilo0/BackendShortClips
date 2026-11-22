@@ -35,8 +35,12 @@ class RequestRejected(ValueError):
 def canonical_youtube(raw: str) -> str:
     if not isinstance(raw, str) or len(raw) > 2048:
         raise RequestRejected("Informe um link individual do YouTube.")
-    p = urlsplit(raw.strip())
-    if p.scheme != "https" or p.username or p.password or p.port not in (None, 443):
+    try:
+        p = urlsplit(raw.strip())
+        port = p.port
+    except ValueError:
+        raise RequestRejected("Endereço de vídeo inválido.") from None
+    if p.scheme != "https" or p.username or p.password or port not in (None, 443):
         raise RequestRejected("Use um endereço HTTPS do YouTube.")
     host = (p.hostname or "").lower()
     if host == "youtu.be":
@@ -59,16 +63,19 @@ def validate_job(payload: dict) -> dict:
         raise RequestRejected("O pedido deve ser um objeto JSON.")
     source = canonical_youtube(payload.get("url", ""))
     # Limites rígidos para proteger o plano Hobby. Não aceitamos override do cliente.
+    if any(isinstance(payload.get(k), bool) or isinstance(payload.get(k), (dict, list, float))
+           for k in ("count", "resolution", "length")):
+        raise RequestRejected("Quantidade, resolução ou duração inválida.")
     try:
         count = int(payload.get("count", CLIPS_PER_JOB))
         resolution = int(payload.get("resolution", OUTPUT_WIDTH))
         length = int(payload.get("length", CLIP_SECONDS))
     except (ValueError, TypeError):
         raise RequestRejected("Quantidade, resolução ou duração inválida.") from None
-    if count != CLIPS_PER_JOB or resolution != OUTPUT_WIDTH or length != CLIP_SECONDS:
-        raise RequestRejected("Nesta fase, apenas 5 Shorts de 45 segundos em 720p são permitidos.")
+    if not 1 <= count <= CLIPS_PER_JOB or resolution != OUTPUT_WIDTH or not 30 <= length <= CLIP_SECONDS:
+        raise RequestRejected("Nesta fase, apenas 1 a 5 Shorts de 30 a 45 segundos em 720p são permitidos.")
     facecam = payload.get("facecam", "auto")
-    if facecam not in FACE_MODES:
+    if not isinstance(facecam, str) or facecam not in FACE_MODES:
         raise RequestRejected("Modo de facecam inválido.")
     manual_box = payload.get("manual_box")
     if manual_box not in (None, []):
@@ -82,7 +89,7 @@ def validate_job(payload: dict) -> dict:
                 and x + w <= 100 and y + h <= 100):
             raise RequestRejected("Facecam fora da tela.")
     return {
-        "url": source, "count": CLIPS_PER_JOB, "length": CLIP_SECONDS,
+        "url": source, "count": count, "length": length,
         "resolution": OUTPUT_WIDTH, "facecam": facecam,
         "model_name": "base", "manual_box": manual_box or None,
     }
@@ -105,6 +112,23 @@ def expired(iso_date: str, now: datetime | None = None) -> bool:
     if t.tzinfo is None:
         raise ValueError("Timestamp sem timezone")
     return (now or datetime.now(timezone.utc)) >= t + timedelta(hours=OUTPUT_TTL_HOURS)
+
+
+def deletion_due(iso_date: str, now: datetime | None = None) -> bool:
+    """Opt-in early deletion leaves a safety window before the 24h access cap.
+
+    Default preserves the existing policy until a frequent scheduler is approved.
+    """
+    try:
+        hours = int(os.getenv("SHORTFORGE_DELETE_AFTER_HOURS", OUTPUT_TTL_HOURS))
+    except (ValueError, TypeError):
+        raise RuntimeError("Configuração de retenção inválida.") from None
+    if not 1 <= hours <= OUTPUT_TTL_HOURS:
+        raise RuntimeError("Exclusão deve ocorrer entre 1 e 24 horas.")
+    started = datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
+    if started.tzinfo is None:
+        raise ValueError("Timestamp sem timezone")
+    return (now or datetime.now(timezone.utc)) >= started + timedelta(hours=hours)
 
 
 def approximate_usage(cpu_seconds: float, wall_seconds: float,

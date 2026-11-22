@@ -11,7 +11,7 @@ from api import sandbox_engine as engine
 VIDEO = "https://youtu.be/yWvnOWILFk0"
 ENVS = {
     "SHORTFORGE_ENGINE": "sandbox",
-    "BLOB_READ_WRITE_TOKEN": "fake-private-blob",
+    "BLOB_READ_WRITE_TOKEN": "vercel_blob_rw_teststore_fake",
     "SHORTFORGE_PUBLIC_ACCESS_KEY": "user-secret-for-hobby-tests-0000000000",
     "SHORTFORGE_WORKER_SECRET": "worker-secret-for-hobby-tests-000000",
     "SHORTFORGE_FRONTEND_ORIGIN": "https://short-clips-tan.vercel.app",
@@ -36,9 +36,12 @@ class SandboxEngineTest(unittest.TestCase):
                 self.vcpus=vcpus
                 self.memory=memory
         class Box:
+            fs = SimpleNamespace(write_bytes=AsyncMock())
             async def create_command(self, executable, args, **kw):
                 calls.append((executable,args,kw))
             async def stop(self):
+                pass
+            async def destroy(self, **kw):
                 pass
         obj=SimpleNamespace(create_sandbox=AsyncMock(return_value=Box()))
         with patch.dict(os.environ, ENVS, clear=True), \
@@ -59,7 +62,7 @@ class SandboxEngineTest(unittest.TestCase):
         self.assertEqual(args["resources"].memory,4096)
         self.assertEqual(args["execution_time_limit"].total_seconds(),42*60)
         self.assertEqual(len(calls),1)
-        self.assertEqual(calls[0][0],"bash")
+        self.assertEqual(calls[0][0],"python3")
         self.assertIn("SHORTFORGE_JOB",calls[0][2]["env"])
         self.assertEqual(lock.await_count,1)
         self.assertGreaterEqual(write.await_count,3)
@@ -83,7 +86,7 @@ class SandboxEngineTest(unittest.TestCase):
                 asyncio.run(engine.submit({"url":VIDEO}))
 
     def test_finish_stops_sandbox_and_releases_lock(self):
-        box = SimpleNamespace(stop=AsyncMock())
+        box = SimpleNamespace(stop=AsyncMock(), destroy=AsyncMock())
         runtime = SimpleNamespace(get_sandbox=AsyncMock(return_value=box))
         status={"id":"a"*32,"status":"completed"}
         with patch.object(engine, "get_job", new_callable=AsyncMock, return_value=status),\

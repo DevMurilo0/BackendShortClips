@@ -1,0 +1,114 @@
+{
+  "url": "https://backend-short-clips-b4j9xdw78-murilo15.vercel.app",
+  "deployment_id": "dpl_Aunh8DQ5HgnYcJAiqxMEHMiCEfft",
+  "project_id": "prj_6q8UJw3x8PLQzdxAOMdnovAwqT1P",
+  "project": "murilo15/backend-short-clips",
+  "state": "READY",
+  "target": "preview",
+  "source_commit": "a3e6841",
+  "artifact_profile": "isolated copy, cron/schedules removed, prebuilt",
+  "created_at": "2026-11-22T19:31:52.833000+00:00",
+  "deploy_attempts": 1,
+  "cli_seconds": 16.33,
+  "namespace": "shortforge-preview/http-54d28e4b4113",
+  "deployment_variable_names": [
+    "SHORTFORGE_ENGINE",
+    "SHORTFORGE_STORAGE_PREFIX",
+    "SHORTFORGE_PUBLIC_ACCESS_KEY"
+  ],
+  "deployment_variables_verified": {
+    "names_in_provider_metadata": true,
+    "engine_disabled_observed": true,
+    "new_key_verified_by_differential_401_and_503": true,
+    "namespace_sent_exact_approved_value": true
+  },
+  "project_persistent_environments_unchanged": true,
+  "production_health_after": {
+    "ok": true,
+    "mode": "gateway",
+    "ready": false
+  },
+  "cron_in_remote_deployment": [],
+  "schedules_in_uploaded_manifest": [],
+  "new_sandboxes": 0,
+  "video_processing": false,
+  "blob_operations": 0,
+  "http_checks": {
+    "passed": 32,
+    "failed": 0,
+    "requests": 32
+  },
+  "real_frontend_check": {
+    "passed": true,
+    "job_requests": 0,
+    "generation_disabled": true
+  },
+  "platform_observations": {
+    "request_records": 35,
+    "status_counts": {
+      "200": 6,
+      "404": 4,
+      "405": 4,
+      "401": 8,
+      "403": 3,
+      "204": 2,
+      "503": 7,
+      "302": 1
+    },
+    "query_time_range": {
+      "start": "2026-11-22T19:09:06.000Z",
+      "end": "2026-11-22T19:39:06.000Z"
+    },
+    "query_excluded_intervals": [],
+    "query_has_more": false,
+    "runtime_error_or_fatal_records": 0,
+    "build_duration": {
+      "startTime": 1795375913731,
+      "endTime": 1795375923535,
+      "endTimeCapped": 1795375923535,
+      "timeToReady": 5041,
+      "timeToContainerExit": 9804,
+      "timeToContainerExitCapped": 9804,
+      "timeForBilling": 60000,
+      "cpuTimeForBilling": 120000
+    },
+    "invoice_cost_usd": null,
+    "function_cpu_memory_usage": null
+  },
+  "limitations": [
+    "Protected Preview requires Vercel access; tested with existing OIDC, without protection changes.",
+    "HTTP 503 is expected for authenticated processing/download requests while engine is disabled.",
+    "Active generation, callback and signed MP4/ZIP browser download require a future separately authorized Preview.",
+    "24-hour deletion automation not activated or homologated."
+  ],
+  "provider_raw_target": null,
+  "known_post_deploy_findings": [
+    {
+      "finding": "Non-ASCII credential comparison raises TypeError",
+      "evidence": "reproduced locally against the deployed source; not injected into remote Preview",
+      "correction": "UTF-8 byte comparisons for user, cron and worker credentials",
+      "local_fixed": true,
+      "deployed": false
+    },
+    {
+      "finding": "Retention cleanup was gated on engine being enabled",
+      "evidence": "code inspection and local HTTP regression",
+      "correction": "cleanup uses its own secret and namespace guard while processing is paused",
+      "local_fixed": true,
+      "deployed": false
+    }
+  ],
+  "postfix_local_tests": {
+    "discovered": 67,
+    "passed": 65,
+    "skipped_opt_in_media": 2,
+    "node_passed": 14,
+    "candidate_build": "passed locally",
+    "second_deployment_executed": false
+  },
+  "production_health_final": {
+    "ok": true,
+    "mode": "gateway",
+    "ready": false
+  }
+}

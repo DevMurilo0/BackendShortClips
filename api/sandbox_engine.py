@@ -13,42 +13,56 @@ import os
 import secrets
 from api.policy import (
     SANDBOX_VCPUS, SANDBOX_MEMORY_MB, SANDBOX_MAX_MINUTES,
-    OUTPUT_TTL_HOURS, monthly_cap, period_key, expired,
+    OUTPUT_TTL_HOURS, monthly_cap, period_key, expired, deletion_due,
     validate_job, RequestRejected, approximate_usage,
 )
 
 STORE_ACCESS = "private"
-ROOT = "shortforge"
+ROOT = os.getenv("SHORTFORGE_STORAGE_PREFIX", "shortforge")
 LOCK = f"{ROOT}/mutex/active.json"
 LATEST = f"{ROOT}/latest.json"
-BOOTSTRAP = r"""
-set -e
-cd /tmp
-if ! command -v ffmpeg >/dev/null || ! command -v tesseract >/dev/null || ! command -v git >/dev/null; then
-  if command -v sudo >/dev/null; then sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg tesseract-ocr git;
-  else apt-get update -qq && apt-get install -y -qq ffmpeg tesseract-ocr git; fi
-fi
-# Clonagem parcial: não baixa GB de vídeos e imagens de validação do GitHub.
-git clone --depth 1 --filter=blob:none --sparse https://github.com/DevMurilo0/ShortClips.git shortforge-source
-cd /tmp/shortforge-source
-git sparse-checkout set shortforge modelos
-cd /tmp
-git clone --depth 1 https://github.com/DevMurilo0/BackendShortClips.git shortforge-backend
-python -m venv /tmp/sfvenv
-/tmp/sfvenv/bin/pip install --disable-pip-version-check --no-cache-dir vercel-blob
-/tmp/sfvenv/bin/pip install --disable-pip-version-check --no-cache-dir -r /tmp/shortforge-source/requirements.txt
-exec /tmp/sfvenv/bin/python /tmp/shortforge-backend/worker/runner.py
-""".strip()
+# The deployed worker is transferred as a trusted archive. Never clone main at runtime.
+BOOTSTRAP = """import tarfile, runpy
+with tarfile.open('/tmp/shortforge-worker.tar.gz') as archive:
+    archive.extractall('/tmp/shortforge-backend', filter='data')
+runpy.run_path('/tmp/shortforge-backend/worker/bootstrap.py', run_name='__main__')
+"""
+
+
+def worker_archive() -> bytes:
+    import io
+    import tarfile
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    content = io.BytesIO()
+    with tarfile.open(fileobj=content, mode="w:gz") as archive:
+        for path in sorted((root / "worker").rglob("*")):
+            if path.is_file() and path.suffix in (".py", ".txt", ".lock"):
+                archive.add(path, arcname=str(path.relative_to(root)))
+    return content.getvalue()
+
 
 
 def enabled() -> bool:
     return os.getenv("SHORTFORGE_ENGINE", "").lower() == "sandbox"
 
 
+def namespace_ready() -> bool:
+    import re
+    if not re.fullmatch(r"shortforge(?:-preview/[a-z0-9][a-z0-9-]{0,47})?", ROOT):
+        return False
+    environment = os.getenv("VERCEL_ENV", "")
+    if environment == "preview":
+        return ROOT.startswith("shortforge-preview/")
+    if environment == "production":
+        return ROOT == "shortforge"
+    return True
+
+
 def configured() -> bool:
     user_key = os.getenv("SHORTFORGE_PUBLIC_ACCESS_KEY", "")
     worker_key = os.getenv("SHORTFORGE_WORKER_SECRET", "")
-    return bool(enabled()
+    return bool(enabled() and namespace_ready()
                 and os.getenv("BLOB_READ_WRITE_TOKEN")
                 and len(user_key) >= 32 and len(worker_key) >= 32
                 and user_key != worker_key
@@ -79,13 +93,28 @@ async def _write_blob(path: str, obj: dict, *, overwrite: bool = True):
     return await _blob().put_blob(
         path, json.dumps(obj, ensure_ascii=False).encode("utf-8"),
         access=STORE_ACCESS, content_type="application/json",
-        allow_overwrite=overwrite, cache_control_max_age=0
+        allow_overwrite=overwrite, cache_control_max_age=60
     )
+
+
+def private_state_url(path: str) -> str:
+    # Python Blob 0.6.2 has no use_cache flag. The documented ?cache=0 wire
+    # option is supported for full private delivery URLs and is required for
+    # mutex/state reads after overwrite. SDK still supplies auth; no URL token.
+    import re
+    from urllib.parse import quote
+    store = os.getenv("BLOB_STORE_ID", "").removeprefix("store_")
+    if not store:
+        match = re.match(r"vercel_blob_rw_([a-zA-Z0-9]+)_", os.getenv("BLOB_READ_WRITE_TOKEN", ""))
+        store = match.group(1) if match else ""
+    if not re.fullmatch(r"[a-zA-Z0-9]+", store):
+        raise RuntimeError("Blob store ID ausente ou inválido.")
+    return f"https://{store.lower()}.private.blob.vercel-storage.com/{quote(path, safe='/')}?cache=0"
 
 
 async def _read_blob(path: str):
     try:
-        result = await _blob().get_blob(path, access=STORE_ACCESS)
+        result = await _blob().get_blob(private_state_url(path), access=STORE_ACCESS)
     except Exception as exc:
         if type(exc).__name__ == "BlobNotFoundError":
             return None
@@ -94,38 +123,63 @@ async def _read_blob(path: str):
 
 
 async def _release_lock(job_id: str):
-    current = await _read_blob(LOCK)
-    if current and current.get("id") == job_id:
-        metadata = await _blob().head_blob(LOCK)
-        await _blob().delete_blob(LOCK, if_match=metadata.etag)
+    # Compare the ID and delete the *same version*, never HEAD after GET.
+    try:
+        result = await _blob().get_blob(private_state_url(LOCK), access=STORE_ACCESS)
+        current = json.loads(result.body)
+        if current.get("id") == job_id and result.metadata.etag:
+            await _blob().delete_blob(LOCK, if_match=result.metadata.etag)
+    except Exception as exc:
+        if type(exc).__name__ not in ("BlobNotFoundError", "BlobPreconditionFailedError"):
+            raise
 
 
 async def _acquire_lock(job_id: str):
     active = await _read_blob(LOCK)
     if active:
-        # Um Sandbox Hobby termina em até 45min, deixando pequena margem.
         try:
             started = datetime.fromisoformat(active["started_at"])
             stale = datetime.now(timezone.utc) >= started + timedelta(minutes=48)
         except (KeyError, ValueError, TypeError):
-            stale = False  # nunca apaga um lock desconhecido sem operador
+            stale = False
         if stale:
+            # Deadline includes cold-start margin; stop must succeed before reuse.
+            await _stop_box("shortforge-" + active["id"])
             await _release_lock(active["id"])
         else:
             raise RequestRejected("Já existe um processamento em andamento. Aguarde terminar.")
-    # allow_overwrite=False: criação atômica protege requisições simultâneas.
     try:
         await _write_blob(LOCK, {"id": job_id, "started_at": _stamp()}, overwrite=False)
     except Exception as exc:
-        if type(exc).__name__ in ("BlobAlreadyExistsError", "BlobConflictError",
-                                  "BlobStoreConflictError"):
+        # Python 0.6.2 maps existing-path responses to BlobError, not a special
+        # BlobAlreadyExistsError. Fail closed for storage/network errors too.
+        if (getattr(exc, "status_code", None) in (409, 412)
+                or "already exists" in str(exc).lower()):
             raise RequestRejected("Já existe outro processamento ativo.") from None
         raise
 
 
-async def _quota():
+async def _terminate_box(box):
+    # Destroy still runs if stop fails; never leave a named worker/snapshot.
+    try:
+        await box.stop()
+    finally:
+        await box.destroy(delete_orphan_snapshots=True)
+
+
+async def _stop_box(name):
+    sandbox, _ = _sandbox()
+    try:
+        box = await sandbox.get_sandbox(name=name)
+        await _terminate_box(box)
+    except Exception as exc:
+        if getattr(exc, "status_code", None) != 404:
+            raise
+
+
+async def _quota(month=None):
     # Marcadores de uso ficam durante o mês, independentemente da limpeza dos MP4s.
-    prefix = f"{ROOT}/quota/{period_key()}/"
+    prefix = f"{ROOT}/quota/{month or period_key()}/"
     count = 0
     async for _ in _blob().query_blobs(prefix=prefix):
         count += 1
@@ -143,11 +197,11 @@ async def submit(payload: dict) -> dict:
     if opts.get("manual_box"):
         # O formulário usa porcentagens; Job/identify_facecam esperam 0–1.
         opts["manual_box"] = [float(value)/100 for value in opts["manual_box"]]
-    await _quota()
     job_id = secrets.token_hex(16)
     await _acquire_lock(job_id)
     now = _stamp()
-    path = _path(job_id)
+    month = now[:7]
+    path = _path(job_id, month)
     job = dict(
         id=job_id, url=opts["url"], count=opts["count"], length=opts["length"],
         resolution=opts["resolution"], facecam=opts["facecam"],
@@ -160,19 +214,31 @@ async def submit(payload: dict) -> dict:
         zip_name=None,
     )
     created = False
+    creation_attempted = False
     try:
+        await _quota(month)  # Serialized by the global lock, including the last monthly slot.
         await _write_blob(path, job)
-        await _write_blob(LATEST, {"id":job_id,"month":period_key()})
+        await _write_blob(LATEST, {"id":job_id,"month":month})
+        # A reservation survives cold starts, failures, deletion and month rollover.
+        # Conservatively count initialization failures; never refund a possibly running VM.
+        await _write_blob(f"{ROOT}/quota/{month}/{job_id}.json",
+                          {"id":job_id,"started_at":now}, overwrite=False)
         sandbox, SandboxResources = _sandbox()
-        box = await sandbox.create_sandbox(
-            name=job["sandbox_name"], image="vercel/sandbox/python:3.14",
+        creation_attempted = True
+        box = await asyncio.wait_for(sandbox.create_sandbox(
+            name=job["sandbox_name"],
+            image=os.getenv("SHORTFORGE_SANDBOX_IMAGE", "vercel/sandbox/python:3.14"),
+            region="iad1",
             execution_time_limit=timedelta(minutes=SANDBOX_MAX_MINUTES),
             resources=SandboxResources(vcpus=SANDBOX_VCPUS,
                                        memory=SANDBOX_MEMORY_MB),
             persistent=False,
-        )
+        ), timeout=25)
         created = True
+        await box.fs.write_bytes("/tmp/shortforge-worker.tar.gz", worker_archive())
         env = {
+            "OMP_NUM_THREADS": "2", "OPENBLAS_NUM_THREADS": "2",
+            "MKL_NUM_THREADS": "2", "TOKENIZERS_PARALLELISM": "false",
             "BLOB_READ_WRITE_TOKEN": os.environ["BLOB_READ_WRITE_TOKEN"],
             "SHORTFORGE_JOB": json.dumps(job, ensure_ascii=False),
             "SHORTFORGE_JOB_BLOB_PATH": path,
@@ -183,23 +249,28 @@ async def submit(payload: dict) -> dict:
             ).rstrip("/"),
         }
         # create_command é detached: a Function responde sem esperar 5 Shorts.
-        await box.create_command("bash", ["-lc", BOOTSTRAP],
+        await box.create_command("python3", ["-c", BOOTSTRAP],
                                  env=env, stdout=-3, stderr=-3)
-        # Não assume que já terminou: o worker publica estados no Blob.
-        await _write_blob(f"{ROOT}/quota/{period_key()}/{job_id}.json",
-                          {"id":job_id,"started_at":now}, overwrite=False)
         return job
-    except Exception:
+    except BaseException as failure:
+        # A transport timeout can happen AFTER Vercel accepted creation. Keep
+        # the lock for uncertain outcomes; the deterministic name reconciles it.
+        definite_rejection = getattr(failure, "status_code", None) in (400, 401, 403, 422)
+        stopped = not creation_attempted or definite_rejection
         if created:
             try:
-                await box.stop()
+                await _terminate_box(box)
+                stopped = True
             except Exception:
-                pass
-        await _release_lock(job_id)
+                pass  # Keep lock until deadline if VM stop could not be confirmed.
+        if stopped:
+            await _release_lock(job_id)
         job.update(status="failed", stage="failed",
+                   launch_uncertain=creation_attempted and not created and not definite_rejection,
                    message="Falha ao inicializar o motor de processamento.")
         await _write_blob(path, job)
         raise
+
 
 
 async def get_job(job_id: str, *, month: str | None = None) -> dict | None:
@@ -217,26 +288,24 @@ async def get_job(job_id: str, *, month: str | None = None) -> dict | None:
     if not job:
         return None
     if expired(job["started_at"]):
-        return {"id":job_id,"status":"expired","message":"Arquivos expirados após 24 horas."}
+        await _expire_job(job)
+        return job
     if job["status"] in ("queued","running","preparing"):
         started = datetime.fromisoformat(job["started_at"])
         if datetime.now(timezone.utc) >= started + timedelta(minutes=48):
             job.update(status="failed",stage="failed",
                        message="O Sandbox atingiu o limite de tempo ou foi encerrado.",
                        errors=["Timeout do motor: limite de 42 minutos por tarefa."])
+            await _stop_box(job["sandbox_name"])
             await _write_blob(_path(job_id,job["started_at"][:7]),job)
             await _release_lock(job_id)
     if job["status"] in ("completed","failed","partial","cancelled"):
-        try:
-            sandbox,_ = _sandbox()
-            box = await sandbox.get_sandbox(name=job["sandbox_name"])
-            await box.stop()
-        except Exception:
-            pass
-        try:
-            await _release_lock(job_id)
-        except Exception:
-            pass
+        if job.get("launch_uncertain"):
+            started = datetime.fromisoformat(job["started_at"])
+            if datetime.now(timezone.utc) < started + timedelta(minutes=48):
+                return job  # Do not unlock a creation request whose outcome is unknown.
+        await _stop_box(job["sandbox_name"])
+        await _release_lock(job_id)
     return job
 
 
@@ -252,9 +321,7 @@ async def cancel(job_id):
     if not job:
         return None
     if job.get("status") in ("running","queued","preparing"):
-        sandbox,_ = _sandbox()
-        box = await sandbox.get_sandbox(name=job["sandbox_name"])
-        await box.stop()
+        await _stop_box(job["sandbox_name"])
         job.update(status="cancelled",stage="cancelled",message="Cancelado pelo usuário.")
         await _write_blob(_path(job_id,job["started_at"][:7]), job)
         await _release_lock(job_id)
@@ -268,12 +335,7 @@ async def finalize(job_id: str):
         return {"ok":False,"reason":"Tarefa inexistente."}
     if job.get("status") not in ("completed","failed","partial","cancelled","expired"):
         return {"ok":False,"reason":"Tarefa ainda está em execução."}
-    try:
-        sandbox,_ = _sandbox()
-        box = await sandbox.get_sandbox(name="shortforge-" + job_id)
-        await box.stop()
-    except Exception:
-        pass  # O timeout de 42 minutos ainda garante o encerramento.
+    await _stop_box("shortforge-" + job_id)
     await _release_lock(job_id)
     return {"ok":True,"id":job_id,"status":job["status"]}
 
@@ -327,20 +389,73 @@ def re_job_id(job_id):
     return len(job_id)==32 and all(x in "0123456789abcdef" for x in job_id)
 
 
+async def _expire_job(job):
+    if job.get("status") == "expired":
+        return
+    await _stop_box(job["sandbox_name"])
+    prefix = _path(job["id"], job["started_at"][:7]).removesuffix("state.json")
+    paths = {item.pathname async for item in _blob().query_blobs(prefix=prefix)
+             if item.pathname != prefix + "state.json"}
+    # Reconcile the manifest too; a listing alone must not hide a known artifact.
+    known = [clip.get("blob_path") for clip in job.get("clips", [])] + [job.get("zip_path")]
+    paths.update(path for path in known if isinstance(path, str) and path.startswith(prefix + "output/"))
+    paths = sorted(paths)
+    for offset in range(0, len(paths), 1000):
+        await _blob().delete_blob(paths[offset:offset + 1000])
+    # Record success only after private catalog reads confirm physical object
+    # removal. If one remains, keep a retryable state for the next cleanup run.
+    for path in paths:
+        try:
+            await _blob().head_blob(path)
+        except Exception as error:
+            if type(error).__name__ != "BlobNotFoundError" and getattr(error, "status_code", None) != 404:
+                raise
+        else:
+            raise RuntimeError("Exclusão ainda não confirmada no Blob.")
+    deleted_at = _stamp()
+    job.update(status="expired", stage="expired", clips=[], zip_name=None,
+               deletion={"verified": True, "deleted_at": deleted_at,
+                         "artifacts": len(paths), "past_24h_deadline": expired(job["started_at"])},
+               message="Prazo de armazenamento encerrado. Arquivos removidos.")
+    job.pop("zip_path", None)
+    # Retain small audit tombstone for durable quota/usage accounting.
+    await _write_blob(prefix + "state.json", job)
+    await _release_lock(job["id"])
+
+
 async def cleanup():
-    """Expira logicamente em 24h; cron diário apaga arquivos físicos em lote."""
-    deleted=0
-    async for item in _blob().query_blobs(prefix=f"{ROOT}/jobs/"):
-        if "/state.json" not in item.pathname:
+    """Delete expired artifacts; retain quota and usage tombstones."""
+    if not namespace_ready():
+        raise RuntimeError("Namespace inválido para limpeza neste ambiente.")
+    cleaned = 0
+    paths = [item.pathname async for item in _blob().query_blobs(prefix=f"{ROOT}/jobs/")
+             if item.pathname.endswith("/state.json")]
+    for path in paths:
+        job = await _read_blob(path)
+        if not job or job.get("status") == "expired":
             continue
-        job=await _read_blob(item.pathname)
-        if not job or not expired(job["started_at"]):
-            continue
-        prefix=item.pathname.removesuffix("state.json")
-        paths=[]
-        async for file in _blob().query_blobs(prefix=prefix):
-            paths.append(file.pathname)
-        if paths:
-            await _blob().delete_blob(paths[:1000])
-            deleted+=len(paths[:1000])
-    return {"deleted_blobs":deleted}
+        if deletion_due(job["started_at"]):
+            await _expire_job(job)
+            cleaned += 1
+        elif job["status"] in ("queued", "running", "preparing"):
+            await get_job(job["id"], month=job["started_at"][:7])
+    return {"expired_jobs": cleaned}
+
+
+def public_job(job):
+    """Only this single-owner API can mint download links. Never expose storage paths."""
+    import copy
+    result = copy.deepcopy(job)
+    result.pop("sandbox_name", None)
+    result.pop("launch_uncertain", None)
+    for clip in result.get("clips", []):
+        path = clip.pop("blob_path", None)
+        clip.pop("download_url", None)
+        if path and result["status"] in ("completed", "partial"):
+            from urllib.parse import urlencode
+            clip["download_endpoint"] = "/api/download?" + urlencode({"pathname": path})
+    path = result.pop("zip_path", None)
+    if path and result["status"] in ("completed", "partial"):
+        from urllib.parse import urlencode
+        result["zip_download_endpoint"] = "/api/download?" + urlencode({"pathname": path})
+    return result

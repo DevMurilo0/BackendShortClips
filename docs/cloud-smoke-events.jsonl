@@ -1,0 +1,13 @@
+{"at": "2026-11-22T18:56:10.781004+00:00", "phase": "preflight", "test_id": "41b3219dfac4949b984113b903cedd66", "max_compute_usd": 0.05112}
+{"at": "2026-11-22T18:56:12.424043+00:00", "phase": "atomic_blob", "winners": 1}
+{"at": "2026-11-22T18:56:19.915562+00:00", "phase": "sandbox_created", "name": "sf-test-41b3219dfac4949b984113b903cedd66", "project_id": "prj_6q8UJw3x8PLQzdxAOMdnovAwqT1P", "region": "iad1", "vcpus": 2, "memory_mb": 4096, "persistent": false}
+{"at": "2026-11-22T18:56:20.777522+00:00", "phase": "worker_stage", "stage": "queued", "status": "queued"}
+{"at": "2026-11-22T18:56:20.777785+00:00", "phase": "worker_wait", "vm_seconds": 1.2}
+{"at": "2026-11-22T18:56:52.294614+00:00", "phase": "worker_wait", "vm_seconds": 32.7}
+{"at": "2026-11-22T18:57:07.982339+00:00", "phase": "worker_stage", "stage": "analyzing", "status": "running"}
+{"at": "2026-11-22T18:57:13.194888+00:00", "phase": "worker_stage", "stage": "transcribing", "status": "running"}
+{"at": "2026-11-22T18:57:23.630721+00:00", "phase": "worker_stage", "stage": "rendering", "status": "running"}
+{"at": "2026-11-22T18:57:23.630971+00:00", "phase": "worker_wait", "vm_seconds": 64.1}
+{"at": "2026-11-22T18:57:28.981662+00:00", "phase": "worker_stage", "stage": "completed", "status": "running"}
+{"at": "2026-11-22T18:58:17.008738+00:00", "phase": "artifacts_validated", "mp4_bytes": 6002235, "zip_bytes": 6004304}
+{"at": "2026-11-22T18:58:21.523861+00:00", "phase": "cleanup_finished", "sandbox_destroyed": true, "remaining_blobs": 0, "errors": []}

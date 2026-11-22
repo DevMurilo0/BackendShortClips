@@ -1,0 +1,331 @@
+{
+  "url": "https://backend-short-clips-ipltw3gpb-murilo15.vercel.app",
+  "deployment_id": "dpl_AxudiC3YBw14ekq4PS87579VrRRB",
+  "checked_at": "2026-11-22T21:13:54.022901+00:00",
+  "engine": "disabled",
+  "ready": false,
+  "requests": 35,
+  "passed": 35,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "health_disabled",
+      "method": "GET",
+      "path": "/api/health",
+      "expected": 200,
+      "actual": 200,
+      "passed": true,
+      "seconds": 1.663
+    },
+    {
+      "name": "rewritten_health",
+      "method": "GET",
+      "path": "/api/index?sf_route=health",
+      "expected": 200,
+      "actual": 200,
+      "passed": true,
+      "seconds": 0.54
+    },
+    {
+      "name": "health_cors_allowed",
+      "method": "GET",
+      "path": "/api/health",
+      "expected": 200,
+      "actual": 200,
+      "passed": true,
+      "seconds": 0.534
+    },
+    {
+      "name": "public_health_no_cors_for_other_origin",
+      "method": "GET",
+      "path": "/api/health",
+      "expected": 200,
+      "actual": 200,
+      "passed": true,
+      "seconds": 0.519
+    },
+    {
+      "name": "jobs_missing_key",
+      "method": "GET",
+      "path": "/api/jobs/latest",
+      "expected": 401,
+      "actual": 401,
+      "passed": true,
+      "seconds": 0.554
+    },
+    {
+      "name": "jobs_wrong_key",
+      "method": "GET",
+      "path": "/api/jobs/latest",
+      "expected": 401,
+      "actual": 401,
+      "passed": true,
+      "seconds": 0.519
+    },
+    {
+      "name": "jobs_valid_key_disabled",
+      "method": "GET",
+      "path": "/api/jobs/latest",
+      "expected": 503,
+      "actual": 503,
+      "passed": true,
+      "seconds": 0.526
+    },
+    {
+      "name": "status_disabled",
+      "method": "GET",
+      "path": "/api/jobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": 503,
+      "actual": 503,
+      "passed": true,
+      "seconds": 0.404
+    },
+    {
+      "name": "usage_disabled",
+      "method": "GET",
+      "path": "/api/usage",
+      "expected": 503,
+      "actual": 503,
+      "passed": true,
+      "seconds": 0.371
+    },
+    {
+      "name": "create_missing_key",
+      "method": "POST",
+      "path": "/api/jobs",
+      "expected": 401,
+      "actual": 401,
+      "passed": true,
+      "seconds": 0.5
+    },
+    {
+      "name": "create_valid_key_blocked",
+      "method": "POST",
+      "path": "/api/jobs",
+      "expected": 503,
+      "actual": 503,
+      "passed": true,
+      "seconds": 0.376
+    },
+    {
+      "name": "cancel_disabled",
+      "method": "POST",
+      "path": "/api/jobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/cancel",
+      "expected": 503,
+      "actual": 503,
+      "passed": true,
+      "seconds": 0.369
+    },
+    {
+      "name": "retry_disabled",
+      "method": "POST",
+      "path": "/api/jobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/retry",
+      "expected": 503,
+      "actual": 503,
+      "passed": true,
+      "seconds": 0.389
+    },
+    {
+      "name": "download_missing_key",
+      "method": "GET",
+      "path": "/api/download?pathname=shortforge-preview%2Fhttp-54d28e4b4113-authfix%2Fjobs%2F2026-11%2Faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%2Foutput%2Fshort_01.mp4",
+      "expected": 401,
+      "actual": 401,
+      "passed": true,
+      "seconds": 0.779
+    },
+    {
+      "name": "download_wrong_key",
+      "method": "GET",
+      "path": "/api/download?pathname=shortforge-preview%2Fhttp-54d28e4b4113-authfix%2Fjobs%2F2026-11%2Faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%2Foutput%2Fshort_01.mp4",
+      "expected": 401,
+      "actual": 401,
+      "passed": true,
+      "seconds": 0.391
+    },
+    {
+      "name": "download_valid_key_blocked",
+      "method": "GET",
+      "path": "/api/download?pathname=shortforge-preview%2Fhttp-54d28e4b4113-authfix%2Fjobs%2F2026-11%2Faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%2Foutput%2Fshort_01.mp4",
+      "expected": 503,
+      "actual": 503,
+      "passed": true,
+      "seconds": 0.406
+    },
+    {
+      "name": "download_wrong_origin",
+      "method": "GET",
+      "path": "/api/download?pathname=shortforge-preview%2Fhttp-54d28e4b4113-authfix%2Fjobs%2F2026-11%2Faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%2Foutput%2Fshort_01.mp4",
+      "expected": 403,
+      "actual": 403,
+      "passed": true,
+      "seconds": 0.401
+    },
+    {
+      "name": "jobs_wrong_origin",
+      "method": "GET",
+      "path": "/api/jobs/latest",
+      "expected": 403,
+      "actual": 403,
+      "passed": true,
+      "seconds": 0.369
+    },
+    {
+      "name": "jobs_cors_preflight",
+      "method": "OPTIONS",
+      "path": "/api/jobs",
+      "expected": 204,
+      "actual": 204,
+      "passed": true,
+      "seconds": 0.381
+    },
+    {
+      "name": "download_cors_preflight",
+      "method": "OPTIONS",
+      "path": "/api/download",
+      "expected": 204,
+      "actual": 204,
+      "passed": true,
+      "seconds": 0.419
+    },
+    {
+      "name": "cors_preflight_wrong_origin",
+      "method": "OPTIONS",
+      "path": "/api/jobs",
+      "expected": 403,
+      "actual": 403,
+      "passed": true,
+      "seconds": 0.373
+    },
+    {
+      "name": "cleanup_missing_cron_auth",
+      "method": "GET",
+      "path": "/api/cleanup",
+      "expected": 401,
+      "actual": 401,
+      "passed": true,
+      "seconds": 0.399
+    },
+    {
+      "name": "user_key_cannot_cleanup",
+      "method": "GET",
+      "path": "/api/cleanup",
+      "expected": 401,
+      "actual": 401,
+      "passed": true,
+      "seconds": 0.368
+    },
+    {
+      "name": "callback_missing_worker_auth",
+      "method": "POST",
+      "path": "/api/internal/finished",
+      "expected": 401,
+      "actual": 401,
+      "passed": true,
+      "seconds": 0.423
+    },
+    {
+      "name": "non_ascii_user",
+      "method": "GET",
+      "path": "/api/jobs/latest",
+      "expected": 401,
+      "actual": 401,
+      "passed": true,
+      "seconds": 0.419
+    },
+    {
+      "name": "non_ascii_cron",
+      "method": "GET",
+      "path": "/api/cleanup",
+      "expected": 401,
+      "actual": 401,
+      "passed": true,
+      "seconds": 0.375
+    },
+    {
+      "name": "non_ascii_worker",
+      "method": "POST",
+      "path": "/api/internal/finished",
+      "expected": 401,
+      "actual": 401,
+      "passed": true,
+      "seconds": 0.358
+    },
+    {
+      "name": "method_PUT",
+      "method": "PUT",
+      "path": "/api/health",
+      "expected": 405,
+      "actual": 405,
+      "passed": true,
+      "seconds": 0.378
+    },
+    {
+      "name": "method_PATCH",
+      "method": "PATCH",
+      "path": "/api/health",
+      "expected": 405,
+      "actual": 405,
+      "passed": true,
+      "seconds": 0.398
+    },
+    {
+      "name": "method_DELETE",
+      "method": "DELETE",
+      "path": "/api/health",
+      "expected": 405,
+      "actual": 405,
+      "passed": true,
+      "seconds": 0.392
+    },
+    {
+      "name": "head_no_response_body",
+      "method": "HEAD",
+      "path": "/api/health",
+      "expected": 405,
+      "actual": 405,
+      "passed": true,
+      "seconds": 0.372
+    },
+    {
+      "name": "not_exposed_/.env.local",
+      "method": "GET",
+      "path": "/.env.local",
+      "expected": 404,
+      "actual": 404,
+      "passed": true,
+      "seconds": 0.238
+    },
+    {
+      "name": "not_exposed_/.vercel/project.json",
+      "method": "GET",
+      "path": "/.vercel/project.json",
+      "expected": 404,
+      "actual": 404,
+      "passed": true,
+      "seconds": 0.232
+    },
+    {
+      "name": "not_exposed_/api/no-such-route",
+      "method": "GET",
+      "path": "/api/no-such-route",
+      "expected": 404,
+      "actual": 404,
+      "passed": true,
+      "seconds": 0.217
+    },
+    {
+      "name": "not_exposed_/api/sandbox_engine.py",
+      "method": "GET",
+      "path": "/api/sandbox_engine.py",
+      "expected": 404,
+      "actual": 404,
+      "passed": true,
+      "seconds": 0.241
+    }
+  ],
+  "new_sandboxes": 0,
+  "blob_api_operations": 0,
+  "credential_values_logged": false,
+  "protection_access": "existing Development OIDC, exact origin only, no protection changes"
+}

@@ -5,7 +5,7 @@ import threading
 import unittest
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -53,7 +53,10 @@ class GatewayTest(unittest.TestCase):
                 payload = r.read()
                 return r.status, json.loads(payload) if payload else None
         except HTTPError as e:
-            return e.code, json.loads(e.read())
+            try:
+                return e.code, json.loads(e.read())
+            finally:
+                e.close()
 
     def test_health_unconfigured(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -111,6 +114,76 @@ class GatewayTest(unittest.TestCase):
             self.assertEqual(status,201)
             self.assertEqual(data['job']['status'],'queued')
             self.assertEqual(outgoing.call_args.args[0].full_url, 'https://worker.test/api/jobs')
+
+    def test_sandbox_status_auth_and_private_download_contract(self):
+        env={**ENV,'SHORTFORGE_ENGINE':'sandbox','BLOB_READ_WRITE_TOKEN':'vercel_blob_rw_teststore_fake',
+             'SHORTFORGE_PUBLIC_ACCESS_KEY':'x'*40,'SHORTFORGE_WORKER_SECRET':'y'*40}
+        job={'id':'a'*32,'status':'completed','sandbox_name':'private-vm',
+             'clips':[{'status':'ready','blob_path':'shortforge/jobs/2026-11/'+ 'a'*32+'/output/short_01.mp4'}]}
+        with patch.dict(os.environ,env,clear=True),patch.object(gateway.sandbox_engine,'get_job',new_callable=AsyncMock,return_value=job):
+            self.assertEqual(self.query('/api/jobs/'+ 'a'*32)[0],401)
+            status,data=self.query('/api/index?sf_route=jobs%2F'+'a'*32,key='x'*40)
+            self.assertEqual(status,200)
+            self.assertNotIn('sandbox_name',data)
+            self.assertNotIn('blob_path',data['clips'][0])
+            self.assertTrue(data['clips'][0]['download_endpoint'].startswith('/api/download?'))
+
+    def test_internal_callback_rejects_user_key_and_malformed_body(self):
+        with patch.dict(os.environ,ENV,clear=True):
+            self.assertEqual(self.query('/api/internal/finished','POST',{'id':'a'*32},'client-secret')[0],401)
+
+    def test_preview_cron_cannot_clean_production_namespace(self):
+        env={**ENV,'SHORTFORGE_ENGINE':'sandbox','VERCEL_ENV':'preview','CRON_SECRET':'cron-test'}
+        with patch.dict(os.environ,env,clear=True),patch.object(gateway.sandbox_engine,'cleanup',new_callable=AsyncMock) as cleanup:
+            status,_=self.query('/api/cleanup',key='cron-test')
+            self.assertEqual(status,503)
+            cleanup.assert_not_awaited()
+
+    def test_disabled_preview_checks_auth_without_processing_or_proxy(self):
+        env={**ENV,'SHORTFORGE_ENGINE':'disabled','VERCEL_ENV':'preview'}
+        with patch.dict(os.environ,env,clear=True),patch.object(gateway,'urlopen') as outgoing:
+            status,data=self.query('/api/health')
+            self.assertEqual((status,data['mode'],data['ready']),(200,'disabled',False))
+            self.assertEqual(self.query('/api/jobs/latest')[0],401)
+            self.assertEqual(self.query('/api/jobs/latest',key='wrong')[0],401)
+            self.assertEqual(self.query('/api/jobs/latest',key='client-secret')[0],503)
+            self.assertEqual(self.query('/api/jobs','POST',{'url':'https://youtu.be/yWvnOWILFk0'},key='client-secret')[0],503)
+            outgoing.assert_not_called()
+
+    def test_unsupported_http_methods_return_json_405(self):
+        with patch.dict(os.environ,ENV,clear=True):
+            for method in ('PUT','DELETE','PATCH'):
+                status,data=self.query('/api/health',method=method)
+                self.assertEqual(status,405)
+                self.assertIn('Método',data['error'])
+
+    def test_non_ascii_bearer_is_unauthorized_while_disabled(self):
+        with patch.dict(os.environ,{**ENV,'SHORTFORGE_ENGINE':'disabled'},clear=True):
+            status,data=self.query('/api/jobs/latest',key='é')
+            self.assertEqual(status,401)
+            self.assertIn('inválida',data['error'])
+
+    def test_non_ascii_cron_auth_is_unauthorized(self):
+        with patch.dict(os.environ,{**ENV,'CRON_SECRET':'cron-test'},clear=True):
+            self.assertEqual(self.query('/api/cleanup',key='é')[0],401)
+
+    def test_non_ascii_worker_secret_is_unauthorized(self):
+        with patch.dict(os.environ,ENV,clear=True):
+            request=Request(self.root+'/api/internal/finished',method='POST',
+                headers={'X-ShortForge-Worker-Secret':'é','Content-Type':'application/json'},
+                data=json.dumps({'id':'a'*32}).encode())
+            with self.assertRaises(HTTPError) as caught:
+                urlopen(request,timeout=3)
+            self.assertEqual(caught.exception.code,401)
+            caught.exception.close()
+
+    def test_authorized_retention_works_while_engine_is_disabled(self):
+        env={**ENV,'SHORTFORGE_ENGINE':'disabled','VERCEL_ENV':'preview','CRON_SECRET':'cron-test'}
+        with patch.dict(os.environ,env,clear=True),patch.object(gateway.sandbox_engine,'ROOT','shortforge-preview/retention-test'),patch.object(gateway.sandbox_engine,'cleanup',new_callable=AsyncMock,return_value={'expired_jobs':0}) as cleanup:
+            status,data=self.query('/api/cleanup',key='cron-test')
+            self.assertEqual(status,200)
+            self.assertEqual(data,{'expired_jobs':0})
+            cleanup.assert_awaited_once()
 
     def test_storage_not_misrepresented(self):
         with patch.dict(os.environ, ENV, clear=True):

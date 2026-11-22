@@ -20,6 +20,11 @@ MAX_RESPONSE = 512 * 1024
 ROUTE = re.compile(r"/api/jobs(?:/latest|/[a-f0-9]{8,40}(?:/(?:cancel|retry))?)?$")
 
 
+def credential_matches(supplied: str, expected: str) -> bool:
+    """HTTP headers may contain Latin-1; compare UTF-8 bytes without exceptions."""
+    return hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
+
+
 def config():
     origin = os.getenv("SHORTFORGE_FRONTEND_ORIGIN", "https://short-clips-tan.vercel.app").rstrip("/")
     worker = os.getenv("SHORTFORGE_WORKER_URL", "").rstrip("/")
@@ -29,8 +34,11 @@ def config():
     valid_url = (parsed.scheme == "https" and bool(parsed.netloc) and
                  not parsed.username and not parsed.password and
                  parsed.path in ("", "/") and not parsed.query and not parsed.fragment)
-    mode = "sandbox" if sandbox_engine.enabled() else "gateway"
+    explicitly_disabled = os.getenv("SHORTFORGE_ENGINE", "").lower() == "disabled"
+    mode = "disabled" if explicitly_disabled else ("sandbox" if sandbox_engine.enabled() else "gateway")
     ready = sandbox_engine.configured() if mode == "sandbox" else bool(origin and valid_url and access_key and worker_secret)
+    if explicitly_disabled:
+        ready = False  # Never proxy to another worker when explicitly paused.
     return {
         "mode": mode,
         "origin": origin,
@@ -79,19 +87,29 @@ class handler(BaseHTTPRequestHandler):
         for key, value in (extra or {}).items():
             self.send_header(key, value)
         self.end_headers()
-        self.wfile.write(raw)
+        if self.command != "HEAD":
+            self.wfile.write(raw)
+
+    def method_not_allowed(self):
+        self.send_json(405, {"error":"Método não permitido."},
+                       {"Allow":"GET, POST, OPTIONS"})
+
+    do_PUT = do_DELETE = do_PATCH = do_HEAD = method_not_allowed
 
     def check_auth(self, cfg):
         origin = self.headers.get("Origin", "").rstrip("/")
         if origin and origin != cfg["origin"]:
             self.send_json(403, {"error": "Origem não permitida."})
             return False
-        if not cfg["ready"]:
+        if not cfg["access_key"]:
             self.send_json(503, {"error": "Backend de processamento não configurado; geração de Shorts indisponível."})
             return False
         scheme, _, key = self.headers.get("Authorization", "").partition(" ")
-        if scheme.lower() != "bearer" or not hmac.compare_digest(key, cfg["access_key"]):
+        if scheme.lower() != "bearer" or not credential_matches(key, cfg["access_key"]):
             self.send_json(401, {"error": "Chave de acesso inválida ou ausente."})
+            return False
+        if not cfg["ready"]:
+            self.send_json(503, {"error": "Backend de processamento não configurado; geração de Shorts indisponível."})
             return False
         return True
 
@@ -121,10 +139,12 @@ class handler(BaseHTTPRequestHandler):
         if path == "/api/cleanup":
             expected = os.getenv("CRON_SECRET", "")
             auth = self.headers.get("Authorization", "")
-            if not expected or not hmac.compare_digest(auth, "Bearer " + expected):
+            if not expected or not credential_matches(auth, "Bearer " + expected):
                 return self.send_json(401, {"error":"Não autorizado."})
-            if cfg["mode"] != "sandbox":
-                return self.send_json(503, {"error":"Sandbox não habilitado."})
+            # Retention maintenance must keep working while public processing
+            # is paused. Its own secret + namespace guard authorize deletion.
+            if not sandbox_engine.namespace_ready():
+                return self.send_json(503, {"error":"Namespace de limpeza não habilitado."})
             try:
                 return self.send_json(200, asyncio.run(sandbox_engine.cleanup()))
             except Exception:
@@ -145,7 +165,7 @@ class handler(BaseHTTPRequestHandler):
                 if job is None:
                     return self.send_json(404, {"error":"Tarefa não encontrada."})
                 # /latest tem envelope; /jobs/id devolve estado direto (contrato da UI local).
-                return self.send_json(200, {"job":job} if path == "/api/jobs/latest" else job)
+                return self.send_json(200, {"job":sandbox_engine.public_job(job)} if path == "/api/jobs/latest" else sandbox_engine.public_job(job))
             except Exception:
                 return self.send_json(502, {"error":"Não foi possível acessar o estado dos vídeos."})
         if path.startswith("/downloads/"):
@@ -160,7 +180,7 @@ class handler(BaseHTTPRequestHandler):
         if path == "/api/internal/finished":
             secret = os.getenv("SHORTFORGE_WORKER_SECRET", "")
             given = self.headers.get("X-ShortForge-Worker-Secret", "")
-            if not secret or not hmac.compare_digest(given, secret):
+            if not secret or not credential_matches(given, secret):
                 return self.send_json(401, {"error":"Não autorizado."})
             try:
                 size = int(self.headers.get("Content-Length","0"))
@@ -169,11 +189,11 @@ class handler(BaseHTTPRequestHandler):
                 job_id = json.loads(self.rfile.read(size)).get("id","")
                 if not re.fullmatch(r"[a-f0-9]{32}",job_id):
                     raise ValueError()
-                if cfg["mode"] != "sandbox":
+                if cfg["mode"] != "sandbox" or not sandbox_engine.namespace_ready():
                     return self.send_json(503, {"error":"Sandbox não habilitado."})
                 result = asyncio.run(sandbox_engine.finalize(job_id))
                 return self.send_json(200, result)
-            except (ValueError,TypeError):
+            except (ValueError,TypeError,AttributeError):
                 return self.send_json(400, {"error":"Pedido inválido."})
             except Exception:
                 return self.send_json(502, {"error":"Não foi possível finalizar o worker."})
@@ -195,7 +215,7 @@ class handler(BaseHTTPRequestHandler):
             if path == "/api/jobs":
                 try:
                     job = asyncio.run(sandbox_engine.submit(payload))
-                    return self.send_json(201, {"job":job})
+                    return self.send_json(201, {"job":sandbox_engine.public_job(job)})
                 except RequestRejected as exc:
                     message=str(exc)
                     status=429 if "mensal" in message else (409 if "andamento" in message or "ativo" in message else 400)
@@ -209,7 +229,7 @@ class handler(BaseHTTPRequestHandler):
                 return self.send_json(501, {"error":"Repetição isolada de cortes não está habilitada no worker cloud."})
             try:
                 job = asyncio.run(sandbox_engine.cancel(match.group(1)))
-                return self.send_json(200, {"job":job}) if job else self.send_json(404, {"error":"Tarefa não encontrada."})
+                return self.send_json(200, {"job":sandbox_engine.public_job(job)}) if job else self.send_json(404, {"error":"Tarefa não encontrada."})
             except Exception:
                 return self.send_json(502, {"error":"Falha ao cancelar a tarefa."})
         return self.proxy("POST", cfg, path, body)

@@ -5,6 +5,7 @@ local files; OIDC is sent only to the exact Preview origin, with no redirects.
 """
 from datetime import datetime, timezone
 import json
+import argparse
 from pathlib import Path
 import time
 from urllib.error import HTTPError
@@ -20,13 +21,20 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def main():
-    session=json.loads((LOCAL/'session.json').read_text())
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--authfix", action="store_true")
+    authfix=parser.parse_args().authfix
+    local=ROOT/".vercel/preview-authfix" if authfix else LOCAL
+    session=json.loads((local/("result.json" if authfix else "session.json")).read_text())
+    if authfix:
+        assert session["readyState"]=="READY" and session["exit"]==0
+        session.update(preview_url="https://"+session["url"].removeprefix("https://"), deployment_id=session["id"])
     base=session['preview_url'].rstrip('/')
     parsed=urlsplit(base)
     if parsed.scheme!='https' or not parsed.hostname.endswith('.vercel.app') or parsed.path or parsed.username:
         raise RuntimeError('Unexpected deployment origin')
     token=dotenv_values(ROOT/'.env.local').get('VERCEL_OIDC_TOKEN')
-    secret=(LOCAL/'access-key').read_text().strip()
+    secret=(local/'access-key').read_text().strip()
     if not token or len(secret)<32: raise RuntimeError('Local test credentials unavailable')
     opener=build_opener(NoRedirect())
     checks=[]
@@ -87,6 +95,14 @@ def main():
     request('cleanup_missing_cron_auth','/api/cleanup',401)
     request('user_key_cannot_cleanup','/api/cleanup',401,auth='valid')
     request('callback_missing_worker_auth','/api/internal/finished',401,method='POST',body={'id':'a'*32})
+    if authfix:
+        request('non_ascii_user', '/api/jobs/latest', 401,
+                extra={'Authorization': 'Bearer é'},
+                assertion=lambda p,h,r: p and 'inválida' in p.get('error',''))
+        request('non_ascii_cron', '/api/cleanup', 401,
+                extra={'Authorization': 'Bearer é'})
+        request('non_ascii_worker', '/api/internal/finished', 401, method='POST',
+                body={'id':'a'*32}, extra={'X-ShortForge-Worker-Secret':'é'})
     for method in ('PUT','PATCH','DELETE'):
         request('method_'+method,'/api/health',405,method=method,assertion=lambda p,h,r:p and h.get('Allow')=='GET, POST, OPTIONS')
     request('head_no_response_body','/api/health',405,method='HEAD',assertion=lambda p,h,r:not r)
@@ -97,7 +113,7 @@ def main():
             'failed':sum(not c['passed'] for c in checks),'checks':checks,
             'new_sandboxes':0,'blob_api_operations':0,'credential_values_logged':False,
             'protection_access':'existing Development OIDC, exact origin only, no protection changes'}
-    (ROOT/'docs/preview-http-results.json').write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n')
+    (ROOT/'docs'/('preview-authfix-results.json' if authfix else 'preview-http-results.json')).write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n')
     return report
 
 if __name__=='__main__':

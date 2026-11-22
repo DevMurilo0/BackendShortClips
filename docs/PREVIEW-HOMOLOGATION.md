@@ -55,3 +55,5 @@ provedor. TTL diário do Blob não garante esse prazo.
 
 Production só pode ser habilitada após essa homologação e autorização explícita.
 Push, merge e deploy Production continuam não autorizados.
+
+O Preview corrigido foi publicado e verificado. Consulte [o resultado](PREVIEW-AUTHFIX.md) e [o plano de processamento ativo](PREVIEW-ACTIVE-PLAN.md).

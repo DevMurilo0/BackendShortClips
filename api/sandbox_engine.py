@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import secrets
-from .policy import (
+from api.policy import (
     SANDBOX_VCPUS, SANDBOX_MEMORY_MB, SANDBOX_MAX_MINUTES,
     OUTPUT_TTL_HOURS, monthly_cap, period_key, expired,
     validate_job, RequestRejected, approximate_usage,

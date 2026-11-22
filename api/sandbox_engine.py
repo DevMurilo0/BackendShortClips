@@ -24,7 +24,7 @@ LATEST = f"{ROOT}/latest.json"
 BOOTSTRAP = r"""
 set -e
 cd /tmp
-if ! command -v ffmpeg >/dev/null || ! command -v tesseract >/dev/null; then
+if ! command -v ffmpeg >/dev/null || ! command -v tesseract >/dev/null || ! command -v git >/dev/null; then
   if command -v sudo >/dev/null; then sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg tesseract-ocr git;
   else apt-get update -qq && apt-get install -y -qq ffmpeg tesseract-ocr git; fi
 fi
@@ -42,10 +42,12 @@ def enabled() -> bool:
 
 
 def configured() -> bool:
+    user_key = os.getenv("SHORTFORGE_PUBLIC_ACCESS_KEY", "")
+    worker_key = os.getenv("SHORTFORGE_WORKER_SECRET", "")
     return bool(enabled()
                 and os.getenv("BLOB_READ_WRITE_TOKEN")
-                and os.getenv("SHORTFORGE_PUBLIC_ACCESS_KEY")
-                and os.getenv("SHORTFORGE_WORKER_SECRET")
+                and len(user_key) >= 32 and len(worker_key) >= 32
+                and user_key != worker_key
                 and os.getenv("SHORTFORGE_FRONTEND_ORIGIN", "https://short-clips-tan.vercel.app"))
 
 
@@ -212,6 +214,14 @@ async def get_job(job_id: str, *, month: str | None = None) -> dict | None:
         return None
     if expired(job["started_at"]):
         return {"id":job_id,"status":"expired","message":"Arquivos expirados após 24 horas."}
+    if job["status"] in ("queued","running","preparing"):
+        started = datetime.fromisoformat(job["started_at"])
+        if datetime.now(timezone.utc) >= started + timedelta(minutes=48):
+            job.update(status="failed",stage="failed",
+                       message="O Sandbox atingiu o limite de tempo ou foi encerrado.",
+                       errors=["Timeout do motor: limite de 42 minutos por tarefa."])
+            await _write_blob(_path(job_id,job["started_at"][:7]),job)
+            await _release_lock(job_id)
     if job["status"] in ("completed","failed","partial","cancelled"):
         try:
             sandbox,_ = _sandbox()

@@ -20,6 +20,7 @@
 ## Implementação preparada nesta branch
 
 - Modo sintético opt-in **exclusivo de Preview** via `SHORTFORGE_PREVIEW_SYNTHETIC_ONLY=1` e `SHORTFORGE_PREVIEW_TEST_BLOB` apontando para um arquivo `<namespace>/integration/<32 hex>/input.mp4` já carregado no Blob privado.
+- Quando o motor está ativo em Preview, a ausência desse perfil sintético e de bypass bloqueia a configuração (fail closed); não permite fallback para job YouTube de 42min.
 - Exige exatamente 1 Short de 30 segundos, 720p, facecam manual, URL sentinela `https://youtu.be/00000000000`; **essa URL não será baixada**, pois a fonte é o Blob pré-configurado pelo operador.
 - Reservar `<namespace>/integration/once.json` com create-only evita segundo ensaio pago no mesmo namespace. O Sandbox de teste recebe timeout de 10 minutos e os recursos normais de 2 vCPU / 4096 MB. Sem flags, o motor mantém o comportamento anterior.
 - O worker valida o namespace da fonte sintética, evita redirecionar segredos de callback e reconhece confirmação HTTP real `{ok: true, id}`.

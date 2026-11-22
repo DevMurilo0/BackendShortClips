@@ -10,10 +10,18 @@ class PreviewNamespaceTests(unittest.TestCase):
         with patch.dict(os.environ,{**ENVS,'VERCEL_ENV':'preview'},clear=True),patch.object(engine,'ROOT','shortforge'):
             self.assertFalse(engine.configured())
 
-    def test_preview_namespace_is_configured(self):
-        with patch.dict(os.environ,{**ENVS,'VERCEL_ENV':'preview'},clear=True),patch.object(engine,'ROOT','shortforge-preview/homologation'):
+    def test_preview_namespace_requires_explicit_bounded_test_profile(self):
+        root = 'shortforge-preview/homologation'
+        with patch.dict(os.environ,{**ENVS,'VERCEL_ENV':'preview'},clear=True),patch.object(engine,'ROOT',root):
+            self.assertFalse(engine.configured())
+        scoped = {**ENVS, 'VERCEL_ENV':'preview',
+                  'SHORTFORGE_PREVIEW_SYNTHETIC_ONLY':'1',
+                  'SHORTFORGE_PREVIEW_TEST_BLOB':root+'/integration/'+'a'*32+'/input.mp4',
+                  'SHORTFORGE_PUBLIC_API_URL':'https://backend-short-clips-smoke-murilo15.vercel.app',
+                  'SHORTFORGE_VERCEL_PROTECTION_BYPASS':'test-only-not-a-real-secret'}
+        with patch.dict(os.environ,scoped,clear=True),patch.object(engine,'ROOT',root):
             self.assertTrue(engine.configured())
-            self.assertTrue(engine._path('a'*32).startswith('shortforge-preview/homologation/jobs/'))
+            self.assertTrue(engine._path('a'*32).startswith(root+'/jobs/'))
 
     def test_production_cannot_reset_quota_by_switching_namespace(self):
         with patch.dict(os.environ,{**ENVS,'VERCEL_ENV':'production'},clear=True),patch.object(engine,'ROOT','shortforge-preview/escape'):

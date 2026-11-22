@@ -34,6 +34,11 @@ class SyntheticPreviewSafetyTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 engine.preview_synthetic_source()
 
+    def test_preview_engine_fails_closed_without_synthetic_flag(self):
+        with patch.dict(os.environ, {**ENVS, "VERCEL_ENV":"preview"}, clear=True), \
+             patch.object(engine, "ROOT", ROOT):
+            self.assertFalse(engine.configured())
+
     def test_source_is_confined_to_single_private_preview_namespace(self):
         with patch.dict(os.environ, PREVIEW, clear=True), patch.object(engine, "ROOT", ROOT):
             self.assertEqual(engine.preview_synthetic_source(), SOURCE)

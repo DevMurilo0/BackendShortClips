@@ -92,8 +92,13 @@ def namespace_ready() -> bool:
 
 def configured() -> bool:
     try:
-        preview_synthetic_source()
-    except RuntimeError:
+        test_source = preview_synthetic_source()
+        # An active Preview must never fall back to 42-minute YouTube jobs.
+        if enabled() and os.getenv("VERCEL_ENV") == "preview":
+            if not test_source or not os.getenv("SHORTFORGE_VERCEL_PROTECTION_BYPASS"):
+                return False
+            preview_callback_url()
+    except (RuntimeError, ValueError):
         return False
     user_key = os.getenv("SHORTFORGE_PUBLIC_ACCESS_KEY", "")
     worker_key = os.getenv("SHORTFORGE_WORKER_SECRET", "")

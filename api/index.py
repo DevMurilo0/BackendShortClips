@@ -9,8 +9,8 @@ import hmac
 import json
 import os
 import re
-from . import sandbox_engine
-from .policy import RequestRejected, validate_job
+from api import sandbox_engine
+from api.policy import RequestRejected
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen

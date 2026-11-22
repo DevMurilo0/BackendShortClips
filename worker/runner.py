@@ -13,7 +13,9 @@ import resource
 import shutil
 import sys
 import time
-from urllib.request import Request, urlopen
+from urllib.request import Request, HTTPRedirectHandler, build_opener
+from urllib.parse import urlsplit
+import re
 
 from vercel import blob
 
@@ -56,25 +58,64 @@ async def upload(path: Path, target: str, media_type: str):
                                allow_overwrite=False, cache_control_max_age=60)
 
 
+class NoCallbackRedirects(HTTPRedirectHandler):
+    """Never forward worker secrets or Preview bypass headers to a redirect."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 async def callback(job_id: str):
-    """Solicita encerramento do Sandbox sem expor token ao frontend."""
+    """Confirm the backend processed the callback; polling remains fallback."""
     url = os.environ.get("SHORTFORGE_PUBLIC_API_URL", "").rstrip("/")
     secret = os.environ.get("SHORTFORGE_WORKER_SECRET", "")
     if not url or not secret:
-        return
+        return False
+    parsed = urlsplit(url)
+    if (parsed.scheme != "https" or not parsed.hostname or parsed.username
+            or parsed.password or parsed.path or parsed.query or parsed.fragment):
+        record("callback_configuration_rejected")
+        return False
+    headers = {"Content-Type":"application/json",
+               "X-ShortForge-Worker-Secret": secret}
+    bypass = os.environ.get("SHORTFORGE_VERCEL_PROTECTION_BYPASS", "")
+    if bypass:
+        host = parsed.hostname.lower()
+        if (os.getenv("SHORTFORGE_DEPLOY_ENV") != "preview"
+                or not host.startswith("backend-short-clips-")
+                or not host.endswith("-murilo15.vercel.app")):
+            record("callback_configuration_rejected")
+            return False
+        headers["x-vercel-protection-bypass"] = bypass
     req = Request(url + "/api/internal/finished",
                   data=json.dumps({"id":job_id}).encode(),
-                  headers={"Content-Type":"application/json",
-                           "X-ShortForge-Worker-Secret":secret},
-                  method="POST")
+                  headers=headers, method="POST")
     try:
         def send():
-            with urlopen(req, timeout=15) as response:
-                response.read(1024)
-        await asyncio.to_thread(send)
-    except Exception:
-        # A próxima consulta e o timeout do Sandbox continuam como fallback.
-        pass
+            # urllib follows redirects by default, potentially leaking secrets.
+            opener = build_opener(NoCallbackRedirects())
+            with opener.open(req, timeout=15) as response:
+                if response.status != 200:
+                    return False
+                data = json.loads(response.read(4096))
+                return isinstance(data, dict) and data.get("ok") is True and data.get("id") == job_id
+        accepted = await asyncio.to_thread(send)
+        record("callback_accepted" if accepted else "callback_rejected")
+        return accepted
+    except Exception as error:
+        # A following authorized status poll/timeout still reconciles the VM.
+        record("callback_failed", error=error)
+        return False
+
+def validate_synthetic_blob(pathname: str, root: str, environment: str) -> None:
+    """Reject cross-environment or traversal-shaped Blob test inputs."""
+    if not re.fullmatch(r"shortforge(?:-preview/[a-z0-9][a-z0-9-]{0,47})?", root):
+        raise ValueError("Namespace privado inválido.")
+    if environment == "preview" and not root.startswith("shortforge-preview/"):
+        raise ValueError("Fonte de Preview fora do namespace isolado.")
+    if environment == "production" and root != "shortforge":
+        raise ValueError("Fonte de Production fora do namespace padrão.")
+    if not re.fullmatch(re.escape(root) + r"/integration/[a-f0-9]{32}/input\.mp4", pathname):
+        raise ValueError("Fonte de teste inválida.")
 
 
 async def main():
@@ -100,8 +141,9 @@ async def main():
         # JSON field. The SDK validates the private Blob host/store and does not
         # follow redirects. Keep the transferred file bounded.
         if test_blob:
-            if not test_blob.startswith("shortforge/integration/") or not test_blob.endswith("/input.mp4"):
-                raise ValueError("Fonte de teste inválida.")
+            validate_synthetic_blob(test_blob,
+                                    os.getenv("SHORTFORGE_STORAGE_PREFIX", "shortforge"),
+                                    os.getenv("SHORTFORGE_DEPLOY_ENV", ""))
             output.mkdir(parents=True, exist_ok=True)
             job.source_path = output / "synthetic-input.mp4"
             size = 0

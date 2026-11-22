@@ -7,3 +7,13 @@
 5. Pausar a admissão após o ensaio. Apagar apenas os objetos do namespace de teste e comprovar a remoção por HEAD. Homologar a retenção de até 24h separadamente, incluindo recuperação de falhas e alerta de atraso, conforme RETENTION-24H.md.
 
 O lançamento depende da aprovação do fluxo completo e da retenção física. Qualquer ensaio adicional com VM precisa de autorização de consumo.
+
+## Preparação de código (sem deploy)
+
+A branch `feat/preview-active-smoke-prep` acrescenta um perfil opt-in para uma única fonte sintética privada. Sua ativação exige o *mesmo deployment Preview* nas variáveis `SHORTFORGE_ENGINE=sandbox`, `SHORTFORGE_PREVIEW_SYNTHETIC_ONLY=1`, `SHORTFORGE_PREVIEW_TEST_BLOB=<namespace>/integration/<32-hex>/input.mp4`, `SHORTFORGE_STORAGE_PREFIX=<namespace>`, `SHORTFORGE_PUBLIC_API_URL=<URL exata de Preview>` e `SHORTFORGE_VERCEL_PROTECTION_BYPASS`, além de secrets de usuário/worker, Blob RW e frontend origin. Não configurar estas variáveis até autorização do novo deployment e da VM.
+
+O pedido de ensaio deve enviar a URL sentinela `https://youtu.be/00000000000` com `count=1`, `length=30`, `resolution=720` e `manual_box=[0,0,50,80]`. A mídia real virá do Blob privado do operador, não do URL sentinela. O create-only `integration/once.json` bloqueia um segundo trabalho no mesmo namespace e continua existindo após a limpeza; use outro namespace em caso de nova autorização.
+
+Um bypass de proteção deve ser gerado/administrado apenas pela Vercel; sem ele o callback em Preview protegido não deve iniciar o ensaio. A função HTTP de download exige Bearer próprio; não reutilizar o bypass no JavaScript estático. O worker não segue redirects ao enviar segredos e verifica um recibo JSON com o ID correto.
+
+**Pendências:** executar testes novos em CI, confirmar se o SDK do Blob fornece URL assinada reproduzível no navegador, configurar um Preview isolado com aprovação específica e homologar execução de ponta a ponta. Nenhuma dessas ações está comprovada por este commit de preparação.

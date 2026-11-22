@@ -9,7 +9,7 @@ import json
 import os
 import re
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
 
 MAX_BODY = 16 * 1024
@@ -33,6 +33,25 @@ def config():
         "worker_secret": worker_secret,
         "ready": bool(origin and valid_url and access_key and worker_secret),
     }
+
+
+def requested_path(raw_path):
+    """Resolve a rota original preservada pelo rewrite da Vercel.
+
+    O deploy encaminha /api/<rota> a /api/index?sf_route=<rota>.
+    Receber apenas /api/index faria /api/health passar pela autenticação
+    em vez de retornar o diagnóstico público.
+    """
+    parsed = urlsplit(raw_path)
+    if parsed.path != "/api/index":
+        return parsed.path
+    routes = parse_qs(parsed.query).get("sf_route", [])
+    if len(routes) != 1:
+        return parsed.path
+    route = routes[0]
+    if route == "health" or ROUTE.fullmatch("/api/" + route):
+        return "/api/" + route
+    return parsed.path
 
 
 class handler(BaseHTTPRequestHandler):
@@ -83,7 +102,7 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        path = urlsplit(self.path).path
+        path = requested_path(self.path)
         cfg = config()
         if path == "/api/health":
             return self.send_json(200, {
@@ -102,7 +121,7 @@ class handler(BaseHTTPRequestHandler):
         cfg = config()
         if not self.check_auth(cfg):
             return
-        path = urlsplit(self.path).path
+        path = requested_path(self.path)
         if path != "/api/jobs" and not re.fullmatch(r"/api/jobs/[a-f0-9]{8,40}/(?:cancel|retry)", path):
             return self.send_json(404, {"error": "Rota não encontrada."})
         try:

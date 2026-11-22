@@ -7,6 +7,7 @@ python=json.loads((output/'functions/api/index.func/.vc-config.json').read_text(
 node=json.loads((output/'functions/api/download.func/.vc-config.json').read_text())
 paths=python.get('filePathMap',{})
 assert 'worker/runner.py' in paths
+assert 'worker/diagnostics.py' in paths
 assert 'worker/requirements.lock' in paths
 assert 'worker/shortforge/media.py' in paths
 assert not any(Path(name).name.startswith('.env') for name in paths)

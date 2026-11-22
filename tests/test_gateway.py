@@ -132,6 +132,13 @@ class GatewayTest(unittest.TestCase):
         with patch.dict(os.environ,ENV,clear=True):
             self.assertEqual(self.query('/api/internal/finished','POST',{'id':'a'*32},'client-secret')[0],401)
 
+    def test_preview_cron_cannot_clean_production_namespace(self):
+        env={**ENV,'SHORTFORGE_ENGINE':'sandbox','VERCEL_ENV':'preview','CRON_SECRET':'cron-test'}
+        with patch.dict(os.environ,env,clear=True),patch.object(gateway.sandbox_engine,'cleanup',new_callable=AsyncMock) as cleanup:
+            status,_=self.query('/api/cleanup',key='cron-test')
+            self.assertEqual(status,503)
+            cleanup.assert_not_awaited()
+
     def test_storage_not_misrepresented(self):
         with patch.dict(os.environ, ENV, clear=True):
             self.assertEqual(self.query('/downloads/aabbccdd/short_01.mp4',key='client-secret')[0], 501)

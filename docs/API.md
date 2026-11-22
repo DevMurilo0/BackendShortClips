@@ -40,3 +40,14 @@ Quando `expired`, remover vídeos/ZIP exibidos e parar polling. Falhas e parcial
 mostram `errors`; parcial permite baixar os artefatos válidos. Cancelado também
 é terminal. Polling de ~7s reduz leituras de Blob; sempre usar no-store e tratar
 401/403/404/429/5xx sem anunciar processamento concluído.
+
+
+Isolamento: `SHORTFORGE_STORAGE_PREFIX` é `shortforge` em Production. Preview
+exige `shortforge-preview/<identificador>`; namespace compartilhado é recusado
+antes de consultar/assinar/limpar arquivos. Os endpoints retornados já contêm
+o pathname correto; o frontend não deve montar paths de Blob manualmente.
+
+Retenção opt-in: `SHORTFORGE_DELETE_AFTER_HOURS=22` antecipa elegibilidade da
+limpeza. Só habilitar junto do scheduler aprovado. A remoção preserva recibo de
+confirmação em `deletion` e não altera quota. Default segue 24h. Nenhuma dessas
+variáveis foi alterada remotamente nesta rodada.

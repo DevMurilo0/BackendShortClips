@@ -48,6 +48,10 @@ class Store:
                 raise BlobPreconditionFailedError()
             self.data.pop(path, None)
 
+    async def head_blob(self, path):
+        if path not in self.data: raise BlobNotFoundError()
+        return SimpleNamespace(etag=self.data[path][1])
+
     async def query_blobs(self, *, prefix):
         for path, (body, _) in list(self.data.items()):
             if path.startswith(prefix): yield SimpleNamespace(pathname=path, size=len(body))
@@ -57,7 +61,7 @@ class DurableEngineTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.store = Store()
         self.box = SimpleNamespace(fs=SimpleNamespace(write_bytes=AsyncMock()),
-                                   create_command=AsyncMock(), stop=AsyncMock())
+                                   create_command=AsyncMock(), stop=AsyncMock(), destroy=AsyncMock())
         self.runtime = SimpleNamespace(create_sandbox=AsyncMock(return_value=self.box),
                                        get_sandbox=AsyncMock(return_value=self.box))
         from vercel.sandbox import SandboxResources
@@ -96,6 +100,7 @@ class DurableEngineTests(unittest.IsolatedAsyncioTestCase):
         self.box.create_command.side_effect = OSError('command failure')
         with self.assertRaises(OSError): await e.submit({'url': VIDEO})
         self.box.stop.assert_awaited_once()
+        self.box.destroy.assert_awaited_once_with(delete_orphan_snapshots=True)
         self.assertNotIn(e.LOCK, self.store.data)
 
     async def test_stop_failure_keeps_lock(self):
@@ -116,6 +121,7 @@ class DurableEngineTests(unittest.IsolatedAsyncioTestCase):
         result = await e.cancel(job['id'])
         self.assertEqual(result['status'], 'cancelled')
         self.box.stop.assert_awaited_once()
+        self.box.destroy.assert_awaited_once_with(delete_orphan_snapshots=True)
         self.assertNotIn(e.LOCK, self.store.data)
 
     async def test_timeout_reconciles_state_and_unlocks(self):
@@ -148,3 +154,31 @@ class DurableEngineTests(unittest.IsolatedAsyncioTestCase):
         self.store.delete_blob = raced_delete
         await e._release_lock('a'*32)
         self.assertEqual((await e._read_blob(e.LOCK))['id'], 'b'*32)
+
+
+    async def test_opt_in_early_cleanup_verifies_deletion_before_24h(self):
+        job=await e.submit({'url':VIDEO})
+        job['started_at']=(datetime.now(timezone.utc)-timedelta(hours=22,minutes=1)).isoformat()
+        job['status']='completed'
+        path=e._path(job['id'],job['started_at'][:7])
+        artifact=path.replace('state.json','output/short_01.mp4')
+        job['clips']=[{'status':'ready','blob_path':artifact}]
+        await e._write_blob(path,job)
+        await self.store.put_blob(artifact,b'video')
+        with patch.dict(os.environ,{'SHORTFORGE_DELETE_AFTER_HOURS':'22'}):
+            await e.cleanup()
+        final=json.loads(self.store.data[path][0])
+        self.assertEqual(final['status'],'expired')
+        self.assertTrue(final['deletion']['verified'])
+        self.assertFalse(final['deletion']['past_24h_deadline'])
+        self.assertNotIn(artifact,self.store.data)
+        self.assertEqual((await e.usage())['jobs_month'],1)
+
+    async def test_delete_ack_without_removal_is_not_success(self):
+        job=await e.submit({'url':VIDEO})
+        artifact=e._path(job['id']).replace('state.json','output/short_01.mp4')
+        await self.store.put_blob(artifact,b'video')
+        self.store.delete_blob=AsyncMock()  # Provider acknowledged but object remains.
+        with self.assertRaisesRegex(RuntimeError,'confirmada'):
+            await e._expire_job(job)
+        self.assertNotEqual(job['status'],'expired')

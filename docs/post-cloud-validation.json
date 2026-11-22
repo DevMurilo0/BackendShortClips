@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-22",
+  "cloud_attempts": 1,
+  "cloud_integration_passed": true,
+  "local_followup": {
+    "python_tests": 61,
+    "python_skipped": 0,
+    "includes_real_media_tests": 2,
+    "node_tests": 13,
+    "service_failures_and_namespace_tests": "simulated",
+    "vercel_build": "local Preview, approved",
+    "env_files_excluded": true
+  },
+  "new_cloud_attempt_after_fixes": false,
+  "preview_deployed": false,
+  "production_modified": false,
+  "push_or_merge": false,
+  "retention": {
+    "default_hours": 24,
+    "opt_in_delete_after_hours": 22,
+    "frequent_scheduler_active": false,
+    "receipts_head_verification": "locally tested; same Blob primitives exercised in cloud harness",
+    "index_and_monitoring_implemented": false,
+    "24h_slo_homologated": false
+  }
+}

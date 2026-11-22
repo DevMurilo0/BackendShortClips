@@ -123,7 +123,7 @@ class handler(BaseHTTPRequestHandler):
             auth = self.headers.get("Authorization", "")
             if not expected or not hmac.compare_digest(auth, "Bearer " + expected):
                 return self.send_json(401, {"error":"Não autorizado."})
-            if cfg["mode"] != "sandbox":
+            if cfg["mode"] != "sandbox" or not sandbox_engine.namespace_ready():
                 return self.send_json(503, {"error":"Sandbox não habilitado."})
             try:
                 return self.send_json(200, asyncio.run(sandbox_engine.cleanup()))
@@ -169,7 +169,7 @@ class handler(BaseHTTPRequestHandler):
                 job_id = json.loads(self.rfile.read(size)).get("id","")
                 if not re.fullmatch(r"[a-f0-9]{32}",job_id):
                     raise ValueError()
-                if cfg["mode"] != "sandbox":
+                if cfg["mode"] != "sandbox" or not sandbox_engine.namespace_ready():
                     return self.send_json(503, {"error":"Sandbox não habilitado."})
                 result = asyncio.run(sandbox_engine.finalize(job_id))
                 return self.send_json(200, result)

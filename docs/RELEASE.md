@@ -7,14 +7,16 @@ remota `feat/smart-clips-vercel`. A cópia `ShortForge_Local/main` foi preservad
 
 1. Revisar diffs e testes. Autenticação atual serve a um único operador; não
    anunciar serviço multiusuário sem autorização por dono e rate limiting.
-2. Autorizar o ensaio isolado descrito em VALIDATION.md. Observar um vencedor no
-   teste real de mutex e conferir limpeza. Se o serviço não oferecer atomicidade
-   suficiente, bloquear o motor e mover admissão/quota a banco transacional.
+2. Ensaio isolado aprovado: um vencedor no mutex real, artefatos recuperados e
+   limpeza confirmada (CLOUD-INTEGRATION.md). Repetir operações pagas somente
+   após nova autorização. Antes de qualquer deploy Preview, aprovar a proposta
+   PREVIEW-HOMOLOGATION.md.
 3. Construir/homologar imagem OCI linux/amd64 no projeto correto, com digest de
    base e pacotes revisados; só então usar `SHORTFORGE_SANDBOX_IMAGE`. Sem Docker
    local a imagem não foi produzida. Não fazer snapshot contendo jobs/segredos.
 4. Resolver SLA de exclusão física em 24h: scheduler autenticado mais frequente
-   e plano/custos correspondentes exigem decisão. Cron diário é fallback Hobby.
+   e custos correspondentes exigem decisão. Schedules beta permite 15min no Hobby;
+   usar corte antecipado e monitoramento. Ver RETENTION-24H.md; cron diário é fallback.
 5. Criar Preview isolado após aprovação de consumo, com segredos de teste
    próprios e Blob privado de teste ou namespace segregado. Nunca substituir
    indiscriminadamente variáveis existentes. Production/Preview mantêm token RW

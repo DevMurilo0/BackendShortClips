@@ -28,3 +28,35 @@ for(const [name,mutate,status] of [
   ['uploading',f=>f.state.status='running',409],
   ['Blob failure',f=>f.storage.get=async()=>{throw Error('storage unavailable')},503]
 ])test(name,async()=>{const f=fixture();mutate(f);await createHandler(f.storage)(f.req,f.res);assert.equal(f.res.statusCode,status);assert.equal(f.calls.length,0)});
+
+async function namespaceCase(root, environment, action){
+  const previousRoot=process.env.SHORTFORGE_STORAGE_PREFIX;
+  const previousEnvironment=process.env.VERCEL_ENV;
+  process.env.SHORTFORGE_STORAGE_PREFIX=root;process.env.VERCEL_ENV=environment;
+  try{await action()}finally{
+    if(previousRoot===undefined)delete process.env.SHORTFORGE_STORAGE_PREFIX;else process.env.SHORTFORGE_STORAGE_PREFIX=previousRoot;
+    if(previousEnvironment===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=previousEnvironment;
+  }
+}
+test('Preview refuses the shared Production namespace',async()=>{
+  await namespaceCase('shortforge','preview',async()=>{
+    const f=fixture();await createHandler(f.storage)(f.req,f.res);assert.equal(f.res.statusCode,503);assert.equal(f.calls.length,0);
+  });
+});
+test('Preview cannot sign Production artifact paths',async()=>{
+  await namespaceCase('shortforge-preview/homologation','preview',async()=>{
+    const f=fixture();await createHandler(f.storage)(f.req,f.res);assert.equal(f.res.statusCode,400);assert.equal(f.calls.length,0);
+  });
+});
+test('Preview signs only its own existing artifact',async()=>{
+  await namespaceCase('shortforge-preview/homologation','preview',async()=>{
+    const f=fixture();const own=pathname.replace('shortforge/','shortforge-preview/homologation/');
+    f.req.query.pathname=own;f.state.clips[0].blob_path=own;
+    await createHandler(f.storage)(f.req,f.res);assert.equal(f.res.statusCode,200);assert.equal(f.calls[0].pathname,own);
+  });
+});
+test('Production rejects a Preview namespace',async()=>{
+  await namespaceCase('shortforge-preview/homologation','production',async()=>{
+    const f=fixture();await createHandler(f.storage)(f.req,f.res);assert.equal(f.res.statusCode,503);
+  });
+});

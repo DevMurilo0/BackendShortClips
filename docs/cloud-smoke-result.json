@@ -1,0 +1,177 @@
+{
+  "test_id": "41b3219dfac4949b984113b903cedd66",
+  "project": "murilo15/backend-short-clips",
+  "region": "iad1",
+  "mode": "real_cloud",
+  "vm_deadline_seconds": 540,
+  "vcpus": 2,
+  "memory_mb": 4096,
+  "persistent": false,
+  "production_health": {
+    "mode": "gateway",
+    "ready": false
+  },
+  "worst_case_compute_usd": 0.05112,
+  "cost_limit_usd": 0.057,
+  "billing_data_available": false,
+  "steps": {
+    "private_input_upload": true,
+    "worker_launched": true,
+    "durable_final_state": true,
+    "worker_temp_removed": true,
+    "private_mp4_retrieved": true,
+    "private_zip_retrieved": true
+  },
+  "atomic_blob": {
+    "requests": 8,
+    "winners": 1,
+    "passed": true,
+    "rejections": [
+      {
+        "type": "BlobError",
+        "http_status": 400,
+        "code": "bad_request"
+      },
+      {
+        "type": "BlobError",
+        "http_status": 400,
+        "code": "bad_request"
+      },
+      {
+        "type": "BlobError",
+        "http_status": 400,
+        "code": "bad_request"
+      },
+      {
+        "type": "BlobError",
+        "http_status": 400,
+        "code": "bad_request"
+      },
+      {
+        "type": "BlobError",
+        "http_status": 400,
+        "code": "bad_request"
+      },
+      {
+        "type": "BlobError",
+        "http_status": 400,
+        "code": "bad_request"
+      },
+      {
+        "type": "BlobError",
+        "http_status": 400,
+        "code": "bad_request"
+      }
+    ]
+  },
+  "source_bytes": 3052090,
+  "actual_sandbox": {
+    "name": "sf-test-41b3219dfac4949b984113b903cedd66",
+    "project_id": "prj_6q8UJw3x8PLQzdxAOMdnovAwqT1P",
+    "region": "iad1",
+    "vcpus": 2,
+    "memory_mb": 4096,
+    "persistent": false
+  },
+  "status": "completed",
+  "stages": [
+    "queued",
+    "analyzing",
+    "transcribing",
+    "rendering",
+    "completed"
+  ],
+  "usage": {
+    "mode": "estimated_not_billing",
+    "cpu_seconds": 42.4,
+    "wall_seconds": 50.6,
+    "output_bytes": 12006539,
+    "estimated_cpu_monthly_percent": 0.24,
+    "note": "Estimativa do processo; confira Vercel Usage para valores oficiais."
+  },
+  "worker_exit_code": 0,
+  "worker_diagnostics": [
+    {
+      "at": "2026-11-22T18:56:20.545859+00:00",
+      "phase": "bootstrap_started"
+    },
+    {
+      "at": "2026-11-22T18:56:23.425361+00:00",
+      "phase": "venv_ready",
+      "seconds": 2.88
+    },
+    {
+      "at": "2026-11-22T18:56:27.247501+00:00",
+      "phase": "blob_sdk_ready",
+      "seconds": 6.7
+    },
+    {
+      "at": "2026-11-22T18:56:40.841859+00:00",
+      "phase": "python_dependencies_ready",
+      "seconds": 20.3
+    },
+    {
+      "at": "2026-11-22T18:56:41.093829+00:00",
+      "phase": "worker_started"
+    },
+    {
+      "at": "2026-11-22T18:56:42.763738+00:00",
+      "phase": "input_downloaded",
+      "bytes": 3052090
+    },
+    {
+      "at": "2026-11-22T18:57:04.245389+00:00",
+      "phase": "system_dependencies_ready",
+      "seconds": 23.15
+    },
+    {
+      "at": "2026-11-22T18:57:28.023647+00:00",
+      "phase": "pipeline_finished",
+      "seconds": 46.93
+    },
+    {
+      "at": "2026-11-22T18:57:31.998615+00:00",
+      "phase": "final_state_saved",
+      "seconds": 50.9
+    },
+    {
+      "at": "2026-11-22T18:57:31.999232+00:00",
+      "phase": "worker_temp_removed"
+    }
+  ],
+  "sandbox_stopped_seconds": 78.92,
+  "mp4": {
+    "bytes": 6002235,
+    "sha256": "6c44e900ba87d975f596afe70a18326e73f9aee2a8cb2b81f082c193caa1f806",
+    "width": 720,
+    "height": 1280,
+    "seconds": 30.0,
+    "audio": true,
+    "fully_decoded": true
+  },
+  "zip": {
+    "bytes": 6004304,
+    "files": [
+      "short_01.mp4",
+      "legendas/short_01.srt",
+      "relatorio.json"
+    ],
+    "integrity": true
+  },
+  "integration_passed": true,
+  "sandbox_stop_confirmed": true,
+  "sandbox_destroy_confirmed": true,
+  "sandbox_absent_after_destroy": true,
+  "sandbox_lifetime_upper_seconds": 118.36,
+  "compute_upper_estimate_usd": 0.008439,
+  "deleted_blobs": 4,
+  "remaining_blobs": 0,
+  "deleted_paths_head_404": 4,
+  "cleanup_errors": [],
+  "finished_at": "2026-11-22T18:58:21.523454+00:00",
+  "production_health_after": {
+    "ok": true,
+    "mode": "gateway",
+    "ready": false
+  }
+}

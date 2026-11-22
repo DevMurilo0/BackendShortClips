@@ -1,9 +1,13 @@
 # Validação ShortForge — 22/11/2026
 
-Estado: implementação local corrigida; **não liberado para produção**. Nenhum
-Sandbox desta rodada foi criado e nenhum deploy/push foi executado. A aprovação
-do ensaio de nuvem está pendente. Não confundir os testes abaixo com certificação
-de funcionamento em Vercel.
+Estado atualizado: **ensaio real isolado autorizado e aprovado**, sem deploy,
+push ou ativação pública. Ver [resultado real](CLOUD-INTEGRATION.md),
+[relatório JSON](cloud-smoke-result.json), [retenção](RETENTION-24H.md) e
+[proposta de Preview](PREVIEW-HOMOLOGATION.md).
+
+O registro abaixo preserva a validação local inicial. A execução real posterior
+não valida automaticamente API/Frontend/Callback em Preview nem todas as mudanças
+locais feitas depois do ensaio. Novas execuções pagas exigem outra autorização.
 
 ## Evidências executadas
 
@@ -91,8 +95,8 @@ quota. A quota/uso mensal não somem junto dos MP4s.
 
 **O cron Hobby diário permite resíduo físico de até ~48h desde a criação.**
 Não atende exclusão física no instante de 24h sem uma consulta. Nenhuma mudança
-paga de agendamento foi feita. Para SLA físico de ~24h, escolher/agendar limpeza
-mais frequente em plano compatível ou scheduler externo autenticado. Retenção
+paga de agendamento foi feita. Para um SLO físico de até 24h, homologar o novo Schedules Hobby de 15min
+com corte antecipado e monitoramento, ou um scheduler externo autenticado. Retenção
 exata requer execução confiável/retries; registrar atraso e alertas.
 
 Blob ganhou `ttlDays` no JS SDK 2.9.0, mas o Python 0.6.2 não expõe essa opção.
@@ -115,29 +119,26 @@ revisões/checksums fixos. Não houve aumento de recursos nem criação de snaps
 O modo padrão ainda instala dependências numa VM efêmera; falhas após instalação
 do pequeno SDK Blob são registradas. Falha anterior a isso depende de reconciliação.
 
-## Ensaio real preparado, ainda não executado
+## Ensaio real posterior: aprovado
 
-`scripts/cloud_smoke.py` sem `--execute` não faz chamadas remotas. Com aprovação:
+Executado uma vez no projeto correto com cap de 540s, 2vCPU/4GB, persistent=false.
+MP4 de 30s 720×1280 com áudio e ZIP recuperados do Blob privado. Worker saiu com
+código 0. VM destruída/ausente, quatro blobs apagados e HEAD 404 para todos,
+listagem vazia. Estimativa superior de computação US$0,008439; não é a fatura.
 
-```bash
-/tmp/shortforge-sdk-check/bin/python -m pip install -r scripts/requirements-test.txt
-/tmp/shortforge-sdk-check/bin/python scripts/cloud_smoke.py --execute
-```
+Os testes do caso de falha do controlador são simulados; não foram criadas
+outras VMs para timeout/cancelamento. Relatórios e limites estão em
+[CLOUD-INTEGRATION.md](CLOUD-INTEGRATION.md). O script agora guarda envelope,
+eventos sanitizados, reconciliação por nome e verificação de remoção.
 
-Guardas: OIDC deve identificar murilo15/backend-short-clips e ter validade >10min;
-SDK pode usar as credenciais normais de CLI/ambiente; região iad1 explícita;
-2vCPU/4GB, 600s, persistent=false. Gera fala/cena sintética local, input privado,
-worker real, seleção/OCR/Whisper/render, upload/recuperação MP4 e ZIP, ffprobe,
-status e métricas; para/destroi VM e apaga somente `shortforge/integration/<UUID>/`.
-Antes da VM verifica oito criações Blob simultâneas de um mesmo pathname: exige
-um vencedor. Não altera `shortforge/jobs`, quota real, LATEST, motor ou variáveis
-remotas. Grava relatório sem segredos em `docs/cloud-smoke-result.json`.
+Não executar novamente `scripts/cloud_smoke.py --execute` sem nova autorização.
+Sem `--execute`, ele não faz operações remotas.
 
-Consumo máximo de computação: 0,333 vCPU-h + 0,667 GB-h; referência Pro iad1
-aproximada US$0,057, mais operações Blob/transferência. No Hobby usa franquia.
-Instalação fria pode baixar centenas de MB de dependências/modelo. Não é custo
-observado nem promessa de preço. Callback HTTP público e autenticação ponta a
-ponta exigirão depois um Preview configurado com segredos de teste.
+A documentação atual de Schedules permite 15min no Hobby (beta), diferentemente
+do Cron legado. Foi preparada política opt-in para iniciar exclusão em 22h e
+registrar confirmação por HEAD; default de 24h e cron ativo não mudaram.
+Ver [RETENTION-24H.md](RETENTION-24H.md): scheduler/índice/monitoramento ainda
+precisam de homologação; não existe garantia absoluta de prazo sob falha externa.
 
 ## Reprodução local
 

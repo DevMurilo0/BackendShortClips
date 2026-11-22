@@ -2,7 +2,7 @@ import { head, get, issueSignedToken, presignUrl } from '@vercel/blob';
 import { timingSafeEqual } from 'node:crypto';
 
 /** Signed downloads are issued only after a Bearer key is provided. */
-const FILE = /^shortforge\/jobs\/20\d{2}-(?:0[1-9]|1[0-2])\/[a-f0-9]{32}\/output\/(?:short_0[1-5]\.mp4|shorts_prontos\.zip)$/;
+const FILE = /^jobs\/20\d{2}-(?:0[1-9]|1[0-2])\/[a-f0-9]{32}\/output\/(?:short_0[1-5]\.mp4|shorts_prontos\.zip)$/;
 
 export function createHandler(storage = { head, get, issueSignedToken, presignUrl }) {
 return async function handler(req, res) {
@@ -32,8 +32,15 @@ return async function handler(req, res) {
     timingSafeEqual(Buffer.from(supplied),Buffer.from(expected));
   if (!equal)
     return res.status(401).json({error:'Chave de acesso inválida.'});
+  const root=process.env.SHORTFORGE_STORAGE_PREFIX || 'shortforge';
+  const environment=process.env.VERCEL_ENV;
+  if (!/^shortforge(?:-preview\/[a-z0-9][a-z0-9-]{0,47})?$/.test(root) ||
+      (environment==='preview' && !root.startsWith('shortforge-preview/')) ||
+      (environment==='production' && root!=='shortforge'))
+    return res.status(503).json({error:'Namespace de armazenamento não configurado para este ambiente.'});
   const pathname = req.query.pathname;
-  if (typeof pathname !== 'string' || !FILE.test(pathname))
+  const ownFile=new RegExp('^'+root+'/'+FILE.source.slice(1));
+  if (typeof pathname !== 'string' || !ownFile.test(pathname))
     return res.status(400).json({error:'Caminho do arquivo inválido.'});
   try {
     const statePath = pathname.replace(/output\/[^/]+$/, 'state.json');

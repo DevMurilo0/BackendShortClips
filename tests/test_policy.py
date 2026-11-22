@@ -74,5 +74,23 @@ class LimitsTest(unittest.TestCase):
         self.assertEqual(data["storage_vs_1gb_percent"], 12)
 
 
+class ProactiveRetentionTests(unittest.TestCase):
+    def test_early_cleanup_window_and_default_are_distinct(self):
+        from api.policy import deletion_due
+        now=datetime.now(timezone.utc)
+        source=(now-timedelta(hours=22)).isoformat()
+        with patch.dict(os.environ,{'SHORTFORGE_DELETE_AFTER_HOURS':'22'}):
+            self.assertTrue(deletion_due(source,now))
+            self.assertFalse(expired(source,now))
+        with patch.dict(os.environ,{'SHORTFORGE_DELETE_AFTER_HOURS':'24'}):
+            self.assertFalse(deletion_due(source,now))
+
+    def test_retention_cannot_exceed24h_or_silently_accept_invalid_config(self):
+        from api.policy import deletion_due
+        for value in ('0','25','bad'):
+            with patch.dict(os.environ,{'SHORTFORGE_DELETE_AFTER_HOURS':value}),self.assertRaises(RuntimeError):
+                deletion_due(datetime.now(timezone.utc).isoformat())
+
+
 if __name__ == "__main__":
     unittest.main()

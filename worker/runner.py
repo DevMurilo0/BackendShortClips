@@ -21,6 +21,7 @@ SOURCE = Path(__file__).resolve().parent
 sys.path.insert(0, str(SOURCE))
 
 from shortforge.pipeline import Job, execute
+from diagnostics import record
 
 
 def cpu_time():
@@ -34,7 +35,7 @@ async def save(path, data):
     await blob.put_blob(
         path, json.dumps(data, ensure_ascii=False).encode(),
         access="private", allow_overwrite=True,
-        content_type="application/json", cache_control_max_age=0,
+        content_type="application/json", cache_control_max_age=60,
     )
 
 
@@ -52,7 +53,7 @@ async def upload(path: Path, target: str, media_type: str):
 
     return await blob.put_blob(target, chunks(), access="private",
                                content_length=size, content_type=media_type,
-                               allow_overwrite=False, cache_control_max_age=0)
+                               allow_overwrite=False, cache_control_max_age=60)
 
 
 async def callback(job_id: str):
@@ -94,6 +95,7 @@ async def main():
     task = None
 
     try:
+        record('worker_started')
         # Synthetic source is an operator-only environment flag, never a client
         # JSON field. The SDK validates the private Blob host/store and does not
         # follow redirects. Keep the transferred file bounded.
@@ -110,6 +112,7 @@ async def main():
                         if size > 16*1024*1024:
                             raise ValueError("Fonte de teste excede 16 MiB.")
                         target.write(chunk)
+        if test_blob: record('input_downloaded', byte_count=size)
         # Only trusted bootstrap installs packages; never interpolate user input.
         if not all(shutil.which(tool) for tool in ("ffmpeg", "ffprobe", "tesseract")):
             import subprocess
@@ -121,6 +124,7 @@ async def main():
                                    check=True, timeout=240, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
             await asyncio.to_thread(install_system)
+        record('system_dependencies_ready', seconds=time.monotonic()-started)
         # Bound individual media/temp files; VM enforces the 4 GB memory cap.
         resource.setrlimit(resource.RLIMIT_FSIZE, (1024**3, 1024**3))
         state.update(status="running", stage="analyzing",
@@ -136,6 +140,9 @@ async def main():
                                    "selection_mode","clips","errors","zip_name")})
             # Local completion precedes uploads; do not stop VM or expose local MP4s yet.
             state["status"] = "running"
+            if state.get("stage") in ("completed", "partial", "failed", "cancelled"):
+                state["stage"] = "uploading"
+            state["progress"] = min(99, state.get("progress", 0))
             for clip in state.get("clips", []):
                 clip.pop("download_url", None)
                 if clip.get("status") == "ready":
@@ -143,6 +150,7 @@ async def main():
             state["zip_name"] = None
             await save(state_path,state)
         await task
+        record('pipeline_finished', seconds=time.monotonic()-started)
 
         state.update({k:v for k,v in job.asdict().items()
                       if k in ("status","stage","message","progress","title",
@@ -196,6 +204,7 @@ async def main():
             state["status"]=job.status
             state["message"]=job.message
     except Exception as exc:
+        record('worker_failed', error=exc)
         if task and not task.done():
             job.cancel.set()
             try:
@@ -226,8 +235,10 @@ async def main():
         # Mantém uma linha auditável mesmo se houve falha.
         try:
             await save(state_path,state)
+            record('final_state_saved', seconds=time.monotonic()-started)
         finally:
             shutil.rmtree(output,ignore_errors=True)
+            record('worker_temp_removed')
             await callback(raw["id"])
 
 

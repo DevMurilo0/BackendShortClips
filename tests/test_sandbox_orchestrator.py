@@ -41,6 +41,8 @@ class SandboxEngineTest(unittest.TestCase):
                 calls.append((executable,args,kw))
             async def stop(self):
                 pass
+            async def destroy(self, **kw):
+                pass
         obj=SimpleNamespace(create_sandbox=AsyncMock(return_value=Box()))
         with patch.dict(os.environ, ENVS, clear=True), \
              patch.object(engine, "_sandbox", return_value=(obj, Resources)), \
@@ -84,7 +86,7 @@ class SandboxEngineTest(unittest.TestCase):
                 asyncio.run(engine.submit({"url":VIDEO}))
 
     def test_finish_stops_sandbox_and_releases_lock(self):
-        box = SimpleNamespace(stop=AsyncMock())
+        box = SimpleNamespace(stop=AsyncMock(), destroy=AsyncMock())
         runtime = SimpleNamespace(get_sandbox=AsyncMock(return_value=box))
         status={"id":"a"*32,"status":"completed"}
         with patch.object(engine, "get_job", new_callable=AsyncMock, return_value=status),\

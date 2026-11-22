@@ -2,9 +2,11 @@
 
 API Python leve em Vercel Functions, worker de vídeo em Vercel Sandbox e
 artefatos em Vercel Blob **privado**. O motor permanece desativado por padrão.
-Não considerar a aplicação liberada: falta ensaio real em Sandbox e Preview.
+O ensaio real isolado Sandbox/Blob passou; a aplicação ainda não está liberada.
+Falta homologar API/Frontend/Callback em Preview e o mecanismo de retenção.
 
-Leia [o relatório de validação](docs/VALIDATION.md) para resultados, limitações,
+Veja [o ensaio real](docs/CLOUD-INTEGRATION.md) e a
+[proposta de retenção em 24h](docs/RETENTION-24H.md). Leia [o relatório de validação](docs/VALIDATION.md) para resultados, limitações,
 consumo estimado e passos pendentes. Veja [o contrato da API](docs/API.md) para
 integração e [a preparação de release](docs/RELEASE.md) antes de publicar.
 

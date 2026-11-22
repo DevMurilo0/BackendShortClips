@@ -13,12 +13,12 @@ import os
 import secrets
 from api.policy import (
     SANDBOX_VCPUS, SANDBOX_MEMORY_MB, SANDBOX_MAX_MINUTES,
-    OUTPUT_TTL_HOURS, monthly_cap, period_key, expired,
+    OUTPUT_TTL_HOURS, monthly_cap, period_key, expired, deletion_due,
     validate_job, RequestRejected, approximate_usage,
 )
 
 STORE_ACCESS = "private"
-ROOT = "shortforge"
+ROOT = os.getenv("SHORTFORGE_STORAGE_PREFIX", "shortforge")
 LOCK = f"{ROOT}/mutex/active.json"
 LATEST = f"{ROOT}/latest.json"
 # The deployed worker is transferred as a trusted archive. Never clone main at runtime.
@@ -47,10 +47,22 @@ def enabled() -> bool:
     return os.getenv("SHORTFORGE_ENGINE", "").lower() == "sandbox"
 
 
+def namespace_ready() -> bool:
+    import re
+    if not re.fullmatch(r"shortforge(?:-preview/[a-z0-9][a-z0-9-]{0,47})?", ROOT):
+        return False
+    environment = os.getenv("VERCEL_ENV", "")
+    if environment == "preview":
+        return ROOT.startswith("shortforge-preview/")
+    if environment == "production":
+        return ROOT == "shortforge"
+    return True
+
+
 def configured() -> bool:
     user_key = os.getenv("SHORTFORGE_PUBLIC_ACCESS_KEY", "")
     worker_key = os.getenv("SHORTFORGE_WORKER_SECRET", "")
-    return bool(enabled()
+    return bool(enabled() and namespace_ready()
                 and os.getenv("BLOB_READ_WRITE_TOKEN")
                 and len(user_key) >= 32 and len(worker_key) >= 32
                 and user_key != worker_key
@@ -81,7 +93,7 @@ async def _write_blob(path: str, obj: dict, *, overwrite: bool = True):
     return await _blob().put_blob(
         path, json.dumps(obj, ensure_ascii=False).encode("utf-8"),
         access=STORE_ACCESS, content_type="application/json",
-        allow_overwrite=overwrite, cache_control_max_age=0
+        allow_overwrite=overwrite, cache_control_max_age=60
     )
 
 
@@ -147,11 +159,19 @@ async def _acquire_lock(job_id: str):
         raise
 
 
+async def _terminate_box(box):
+    # Destroy still runs if stop fails; never leave a named worker/snapshot.
+    try:
+        await box.stop()
+    finally:
+        await box.destroy(delete_orphan_snapshots=True)
+
+
 async def _stop_box(name):
     sandbox, _ = _sandbox()
     try:
         box = await sandbox.get_sandbox(name=name)
-        await box.stop()
+        await _terminate_box(box)
     except Exception as exc:
         if getattr(exc, "status_code", None) != 404:
             raise
@@ -239,7 +259,7 @@ async def submit(payload: dict) -> dict:
         stopped = not creation_attempted or definite_rejection
         if created:
             try:
-                await box.stop()
+                await _terminate_box(box)
                 stopped = True
             except Exception:
                 pass  # Keep lock until deadline if VM stop could not be confirmed.
@@ -374,12 +394,29 @@ async def _expire_job(job):
         return
     await _stop_box(job["sandbox_name"])
     prefix = _path(job["id"], job["started_at"][:7]).removesuffix("state.json")
-    paths = [item.pathname async for item in _blob().query_blobs(prefix=prefix)
-             if item.pathname != prefix + "state.json"]
+    paths = {item.pathname async for item in _blob().query_blobs(prefix=prefix)
+             if item.pathname != prefix + "state.json"}
+    # Reconcile the manifest too; a listing alone must not hide a known artifact.
+    known = [clip.get("blob_path") for clip in job.get("clips", [])] + [job.get("zip_path")]
+    paths.update(path for path in known if isinstance(path, str) and path.startswith(prefix + "output/"))
+    paths = sorted(paths)
     for offset in range(0, len(paths), 1000):
         await _blob().delete_blob(paths[offset:offset + 1000])
+    # Record success only after private catalog reads confirm physical object
+    # removal. If one remains, keep a retryable state for the next cleanup run.
+    for path in paths:
+        try:
+            await _blob().head_blob(path)
+        except Exception as error:
+            if type(error).__name__ != "BlobNotFoundError" and getattr(error, "status_code", None) != 404:
+                raise
+        else:
+            raise RuntimeError("Exclusão ainda não confirmada no Blob.")
+    deleted_at = _stamp()
     job.update(status="expired", stage="expired", clips=[], zip_name=None,
-               message="Arquivos expirados após 24 horas.")
+               deletion={"verified": True, "deleted_at": deleted_at,
+                         "artifacts": len(paths), "past_24h_deadline": expired(job["started_at"])},
+               message="Prazo de armazenamento encerrado. Arquivos removidos.")
     job.pop("zip_path", None)
     # Retain small audit tombstone for durable quota/usage accounting.
     await _write_blob(prefix + "state.json", job)
@@ -388,6 +425,8 @@ async def _expire_job(job):
 
 async def cleanup():
     """Delete expired artifacts; retain quota and usage tombstones."""
+    if not namespace_ready():
+        raise RuntimeError("Namespace inválido para limpeza neste ambiente.")
     cleaned = 0
     paths = [item.pathname async for item in _blob().query_blobs(prefix=f"{ROOT}/jobs/")
              if item.pathname.endswith("/state.json")]
@@ -395,7 +434,7 @@ async def cleanup():
         job = await _read_blob(path)
         if not job or job.get("status") == "expired":
             continue
-        if expired(job["started_at"]):
+        if deletion_due(job["started_at"]):
             await _expire_job(job)
             cleaned += 1
         elif job["status"] in ("queued", "running", "preparing"):

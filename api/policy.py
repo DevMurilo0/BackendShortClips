@@ -114,6 +114,23 @@ def expired(iso_date: str, now: datetime | None = None) -> bool:
     return (now or datetime.now(timezone.utc)) >= t + timedelta(hours=OUTPUT_TTL_HOURS)
 
 
+def deletion_due(iso_date: str, now: datetime | None = None) -> bool:
+    """Opt-in early deletion leaves a safety window before the 24h access cap.
+
+    Default preserves the existing policy until a frequent scheduler is approved.
+    """
+    try:
+        hours = int(os.getenv("SHORTFORGE_DELETE_AFTER_HOURS", OUTPUT_TTL_HOURS))
+    except (ValueError, TypeError):
+        raise RuntimeError("Configuração de retenção inválida.") from None
+    if not 1 <= hours <= OUTPUT_TTL_HOURS:
+        raise RuntimeError("Exclusão deve ocorrer entre 1 e 24 horas.")
+    started = datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
+    if started.tzinfo is None:
+        raise ValueError("Timestamp sem timezone")
+    return (now or datetime.now(timezone.utc)) >= started + timedelta(hours=hours)
+
+
 def approximate_usage(cpu_seconds: float, wall_seconds: float,
                       storage_bytes: int, transfer_bytes: int) -> dict:
     """Estimativas locais, NÃO são métricas de faturamento da Vercel."""

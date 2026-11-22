@@ -23,6 +23,8 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
                 (job.destination/name).write_bytes(b'fake-video')
                 job.clips.append(dict(number=i, name=name, status='ready'))
             job.status='completed'
+            job.stage='completed'
+            job.progress=100
         async def save(path,state): states.append(json.loads(json.dumps(state)))
         async def upload(file,path,*args):
             if file.name in failed_names: raise OSError('failed')
@@ -38,6 +40,8 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         callback.assert_awaited_once()
         for state in states[:-1]:
             self.assertEqual(state['status'],'running')
+            self.assertNotEqual(state.get('stage'),'completed')
+            self.assertLess(state.get('progress',0),100)
             self.assertFalse(any(c['status']=='ready' for c in state.get('clips',[])))
         return states[-1], uploads
 

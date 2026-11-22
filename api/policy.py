@@ -24,8 +24,8 @@ MONTHLY_SANDBOX_EGRESS_BYTES = 20 * 1000**3
 MAX_SOURCE_HOURS = 6
 
 YOUTUBE_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
-FACE_MODES = {"auto", "superior_esquerdo", "superior_direito",
-              "inferior_esquerdo", "inferior_direito"}
+FACE_MODES = {"auto", "superior-esquerdo", "superior-direito",
+              "inferior-esquerdo", "inferior-direito"}
 
 
 class RequestRejected(ValueError):

@@ -61,6 +61,27 @@ class GatewayTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(data['ready'], False)
 
+    def test_vercel_rewrite_health_is_public_and_reports_worker_missing(self):
+        # A Vercel encaminha /api/health para /api/index?sf_route=health.
+        with patch.dict(os.environ, {}, clear=True):
+            status, data = self.query('/api/index?sf_route=health&utm_source=chatgpt')
+            self.assertEqual(status, 200)
+            self.assertTrue(data['ok'])
+            self.assertEqual(data['service'], 'BackendShortClips')
+            self.assertFalse(data['ready'])
+
+    def test_vercel_rewrite_jobs_remain_unavailable_without_worker(self):
+        with patch.dict(os.environ, {}, clear=True):
+            status, data = self.query('/api/index?sf_route=jobs', 'POST',
+                                      {'url':'https://youtu.be/yWvnOWILFk0'})
+            self.assertEqual(status, 503)
+            self.assertIn('não configurado', data['error'])
+
+    def test_invalid_rewrite_cannot_bypass_access(self):
+        with patch.dict(os.environ, ENV, clear=True):
+            status, _ = self.query('/api/index?sf_route=malicious',key='client-secret')
+            self.assertEqual(status, 404)
+
     def test_no_fake_job_without_worker(self):
         with patch.dict(os.environ, {}, clear=True):
             status, data = self.query('/api/jobs', 'POST', {'url':'https://youtu.be/yWvnOWILFk0'})
@@ -81,6 +102,15 @@ class GatewayTest(unittest.TestCase):
             self.assertEqual(data['job']['id'], 'aabbccdd')
             req = outgoing.call_args.args[0]
             self.assertEqual(req.headers['X-shortforge-worker-secret'],'worker-secret')
+
+    def test_rewritten_post_reaches_original_worker_route(self):
+        with patch.dict(os.environ, ENV, clear=True), patch.object(gateway, 'urlopen', return_value=Response()) as outgoing:
+            status, data = self.query('/api/index?sf_route=jobs', 'POST',
+                                      {'url':'https://youtu.be/yWvnOWILFk0'},
+                                      'client-secret', 'https://frontend.test')
+            self.assertEqual(status,201)
+            self.assertEqual(data['job']['status'],'queued')
+            self.assertEqual(outgoing.call_args.args[0].full_url, 'https://worker.test/api/jobs')
 
     def test_storage_not_misrepresented(self):
         with patch.dict(os.environ, ENV, clear=True):

@@ -1,0 +1,2 @@
+# Gateway HTTP utiliza apenas a biblioteca padrão do Python.
+# FFmpeg/Whisper rodam em um worker persistente, não nesta Function.

@@ -5,7 +5,7 @@ import threading
 import unittest
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -53,7 +53,10 @@ class GatewayTest(unittest.TestCase):
                 payload = r.read()
                 return r.status, json.loads(payload) if payload else None
         except HTTPError as e:
-            return e.code, json.loads(e.read())
+            try:
+                return e.code, json.loads(e.read())
+            finally:
+                e.close()
 
     def test_health_unconfigured(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -111,6 +114,23 @@ class GatewayTest(unittest.TestCase):
             self.assertEqual(status,201)
             self.assertEqual(data['job']['status'],'queued')
             self.assertEqual(outgoing.call_args.args[0].full_url, 'https://worker.test/api/jobs')
+
+    def test_sandbox_status_auth_and_private_download_contract(self):
+        env={**ENV,'SHORTFORGE_ENGINE':'sandbox','BLOB_READ_WRITE_TOKEN':'vercel_blob_rw_teststore_fake',
+             'SHORTFORGE_PUBLIC_ACCESS_KEY':'x'*40,'SHORTFORGE_WORKER_SECRET':'y'*40}
+        job={'id':'a'*32,'status':'completed','sandbox_name':'private-vm',
+             'clips':[{'status':'ready','blob_path':'shortforge/jobs/2026-11/'+ 'a'*32+'/output/short_01.mp4'}]}
+        with patch.dict(os.environ,env,clear=True),patch.object(gateway.sandbox_engine,'get_job',new_callable=AsyncMock,return_value=job):
+            self.assertEqual(self.query('/api/jobs/'+ 'a'*32)[0],401)
+            status,data=self.query('/api/index?sf_route=jobs%2F'+'a'*32,key='x'*40)
+            self.assertEqual(status,200)
+            self.assertNotIn('sandbox_name',data)
+            self.assertNotIn('blob_path',data['clips'][0])
+            self.assertTrue(data['clips'][0]['download_endpoint'].startswith('/api/download?'))
+
+    def test_internal_callback_rejects_user_key_and_malformed_body(self):
+        with patch.dict(os.environ,ENV,clear=True):
+            self.assertEqual(self.query('/api/internal/finished','POST',{'id':'a'*32},'client-secret')[0],401)
 
     def test_storage_not_misrepresented(self):
         with patch.dict(os.environ, ENV, clear=True):

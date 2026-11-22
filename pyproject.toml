@@ -1,0 +1,5 @@
+[project]
+name = "shortforge-backend"
+version = "0.1.0"
+dependencies = [ "vercel-sandbox==1.1.0", "vercel-blob==0.6.2" ]
+requires-python = "~=3.14.0"

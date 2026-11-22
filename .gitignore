@@ -6,3 +6,6 @@ __pycache__/
 !.env.example
 .vercel/
 *.pyc
+
+node_modules/
+worker/modelos/

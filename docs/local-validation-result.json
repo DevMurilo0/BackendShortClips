@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-22",
+  "python": "3.14.10",
+  "python_tests": {
+    "passed": 47,
+    "skipped": 0,
+    "real_ffmpeg_tests": 2,
+    "cloud_services": "simulated"
+  },
+  "node_tests": {
+    "passed": 9,
+    "cloud_services": "simulated"
+  },
+  "pipeline": {
+    "status": "completed",
+    "clips": 1,
+    "duration": 30.0,
+    "width": 720,
+    "height": 1280,
+    "audio": true,
+    "subtitles": 11,
+    "mode": "real_local_no_cloud"
+  },
+  "browser": {
+    "viewports": [
+      375,
+      1280
+    ],
+    "engine": "Chromium headless",
+    "api": "simulated",
+    "five_clips": true,
+    "authenticated_download_request": true,
+    "cancelled": true,
+    "expired": true,
+    "horizontal_overflow": false,
+    "page_errors": 0
+  },
+  "vercel_build": {
+    "target": "preview",
+    "local": true,
+    "python_runtime": "python3.14",
+    "node_runtime": "nodejs26.x",
+    "worker_bundled": true,
+    "env_files_excluded": true,
+    "deploy_executed": false
+  },
+  "cloud_smoke": {
+    "executed": false,
+    "reason": "pending resource authorization"
+  },
+  "production": {
+    "engine_enabled_by_this_run": false,
+    "env_modified": false,
+    "health_mode": "gateway",
+    "health_ready": false
+  }
+}

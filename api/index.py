@@ -145,7 +145,7 @@ class handler(BaseHTTPRequestHandler):
                 if job is None:
                     return self.send_json(404, {"error":"Tarefa não encontrada."})
                 # /latest tem envelope; /jobs/id devolve estado direto (contrato da UI local).
-                return self.send_json(200, {"job":job} if path == "/api/jobs/latest" else job)
+                return self.send_json(200, {"job":sandbox_engine.public_job(job)} if path == "/api/jobs/latest" else sandbox_engine.public_job(job))
             except Exception:
                 return self.send_json(502, {"error":"Não foi possível acessar o estado dos vídeos."})
         if path.startswith("/downloads/"):
@@ -173,7 +173,7 @@ class handler(BaseHTTPRequestHandler):
                     return self.send_json(503, {"error":"Sandbox não habilitado."})
                 result = asyncio.run(sandbox_engine.finalize(job_id))
                 return self.send_json(200, result)
-            except (ValueError,TypeError):
+            except (ValueError,TypeError,AttributeError):
                 return self.send_json(400, {"error":"Pedido inválido."})
             except Exception:
                 return self.send_json(502, {"error":"Não foi possível finalizar o worker."})
@@ -195,7 +195,7 @@ class handler(BaseHTTPRequestHandler):
             if path == "/api/jobs":
                 try:
                     job = asyncio.run(sandbox_engine.submit(payload))
-                    return self.send_json(201, {"job":job})
+                    return self.send_json(201, {"job":sandbox_engine.public_job(job)})
                 except RequestRejected as exc:
                     message=str(exc)
                     status=429 if "mensal" in message else (409 if "andamento" in message or "ativo" in message else 400)
@@ -209,7 +209,7 @@ class handler(BaseHTTPRequestHandler):
                 return self.send_json(501, {"error":"Repetição isolada de cortes não está habilitada no worker cloud."})
             try:
                 job = asyncio.run(sandbox_engine.cancel(match.group(1)))
-                return self.send_json(200, {"job":job}) if job else self.send_json(404, {"error":"Tarefa não encontrada."})
+                return self.send_json(200, {"job":sandbox_engine.public_job(job)}) if job else self.send_json(404, {"error":"Tarefa não encontrada."})
             except Exception:
                 return self.send_json(502, {"error":"Falha ao cancelar a tarefa."})
         return self.proxy("POST", cfg, path, body)

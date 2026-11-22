@@ -5,6 +5,12 @@
   "version": "0.1.0",
   "description": "ShortForge private Blob signed downloads",
   "dependencies": {
-    "@vercel/blob": "^2.0.0"
+    "@vercel/blob": "2.9.0"
+  },
+  "overrides": {
+    "zod": "4.6.6"
+  },
+  "scripts": {
+    "test": "node --test tests/download.test.mjs"
   }
 }

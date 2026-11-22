@@ -12,8 +12,8 @@ VIDEO = "https://youtu.be/yWvnOWILFk0"
 ENVS = {
     "SHORTFORGE_ENGINE": "sandbox",
     "BLOB_READ_WRITE_TOKEN": "fake-private-blob",
-    "SHORTFORGE_PUBLIC_ACCESS_KEY": "fake-user-secret",
-    "SHORTFORGE_WORKER_SECRET": "fake-worker-secret",
+    "SHORTFORGE_PUBLIC_ACCESS_KEY": "user-secret-for-hobby-tests-0000000000",
+    "SHORTFORGE_WORKER_SECRET": "worker-secret-for-hobby-tests-000000",
     "SHORTFORGE_FRONTEND_ORIGIN": "https://short-clips-tan.vercel.app",
 }
 

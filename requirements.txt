@@ -1,2 +1,4 @@
-# Gateway HTTP utiliza apenas a biblioteca padrão do Python.
-# FFmpeg/Whisper rodam em um worker persistente, não nesta Function.
+# Runtime leve da API — FFmpeg/Whisper nunca entram na Function HTTP.
+# Instale os SDKs apenas quando ativar SHORTFORGE_ENGINE=sandbox.
+vercel-sandbox
+vercel-blob

@@ -32,13 +32,13 @@ Armazenamento de MP4/ZIP (URLs autorizadas)
 
 ## Criar repositório e deploy
 
-1. Crie um repositório GitHub vazio denominado `BackendShortClips`, na conta `DevMurilo0`.
-2. Envie o conteúdo **desta pasta na raiz** do repositório (não envie o ZIP dentro de outro projeto).
-3. Na Vercel, crie projeto separado `backendshortclips` vinculado ao repositório `DevMurilo0/BackendShortClips`, com `Framework Preset: Other`.
-4. Adicione as variáveis de `.env.example` usando **valores reais privados**, não os exemplos. Nunca publique segredos no repositório nem no `index.html`.
-5. Confira `https://<dominio-do-backend>/api/health`.
-6. No frontend ShortClips defina `SHORTFORGE_PUBLIC_API_URL=https://<dominio-do-backend>`, ou utilize o campo de conexão da interface.
-7. Crie o **worker persistente real** e o armazenamento dos MP4/ZIP antes de considerar a aplicação funcional.
+1. Repositório já criado: https://github.com/DevMurilo0/BackendShortClips (este repositório).
+2. Na Vercel, crie o projeto `backendshortclips` vinculando **este GitHub**, com `Framework Preset: Other` e raiz `.`.
+3. Adicione as variáveis de `.env.example` usando **valores reais privados**, não os exemplos. Nunca publique segredos no repositório nem no `index.html`.
+4. Confira `https://<dominio-real-do-backend>/api/health`. Antes do worker, `ready: false` é esperado.
+5. No projeto frontend [ShortClips](https://github.com/DevMurilo0/ShortClips), configure `SHORTFORGE_PUBLIC_API_URL=https://<dominio-real-do-backend>` na Vercel. Sua interface na branch `feat/smart-clips-vercel` já reconhece essa variável e a chave informada no formulário.
+6. Defina `SHORTFORGE_FRONTEND_ORIGIN` no backend com a **origem exata do site publicado** (sem barra final), para liberar CORS.
+7. Implemente um **worker real e armazenamento durável** de MP4/ZIP antes de habilitar geração. Este gateway não é um renderizador, e o site não deve anunciar Shorts prontos sem MP4 válido.
 
 ## Antes de tornar o processamento público
 
@@ -55,4 +55,3 @@ python -m py_compile api/index.py
 ```
 
 Se `ready` for `false`, a API está disponível mas **não há produção de MP4s**. Isso é esperado até configurar o processamento separado.
-# BackendShortClips

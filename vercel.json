@@ -2,13 +2,47 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/index?sf_route=:path*"
+      "source": "/api/download",
+      "destination": "/api/download.js"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/index?sf_route=health"
+    },
+    {
+      "source": "/api/usage",
+      "destination": "/api/index?sf_route=usage"
+    },
+    {
+      "source": "/api/cleanup",
+      "destination": "/api/index?sf_route=cleanup"
+    },
+    {
+      "source": "/api/internal/finished",
+      "destination": "/api/index?sf_route=internal/finished"
+    },
+    {
+      "source": "/api/jobs/latest",
+      "destination": "/api/index?sf_route=jobs/latest"
+    },
+    {
+      "source": "/api/jobs",
+      "destination": "/api/index?sf_route=jobs"
+    },
+    {
+      "source": "/api/jobs/:job_id",
+      "destination": "/api/index?sf_route=jobs/:job_id"
+    },
+    {
+      "source": "/api/jobs/:job_id/:action",
+      "destination": "/api/index?sf_route=jobs/:job_id/:action"
     }
   ],
   "functions": {
     "api/index.py": {
-      "maxDuration": 30
+      "maxDuration": 60,
+      "includeFiles": "worker/{*.py,*.lock,*.txt,shortforge/*.py}",
+      "excludeFiles": "{.env*,.vercel/**,docs/**,scripts/**,tests/**,teste-blob.txt,worker/modelos/**,**/__pycache__/**,**/*.pyc}"
     }
   },
   "crons": [
@@ -16,5 +50,7 @@
       "path": "/api/cleanup",
       "schedule": "0 3 * * *"
     }
-  ]
+  ],
+  "installCommand": "npm ci --omit=dev",
+  "framework": null
 }

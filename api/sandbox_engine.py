@@ -280,21 +280,51 @@ async def finalize(job_id: str):
 
 
 async def usage():
-    prefix = f"{ROOT}/quota/{period_key()}/"
+    """Contagem gravada no Blob e estimativas; não é a fatura oficial."""
+    month = period_key()
+    prefix = f"{ROOT}/quota/{month}/"
     count=0
-    async for _ in _blob().query_blobs(prefix=prefix):
+    cpu_seconds=0.0
+    wall_seconds=0.0
+    output_bytes=0
+    async for mark in _blob().query_blobs(prefix=prefix):
+        if not mark.pathname.endswith(".json"):
+            continue
         count+=1
-    return {"active_limit":1,"jobs_month":count,
-            "jobs_month_limit":monthly_cap(),
-            "remaining_jobs":max(0,monthly_cap()-count),
-            "worker_configured":configured(),
-            "sandbox":{"vcpus":SANDBOX_VCPUS,"memory_mb":SANDBOX_MEMORY_MB,
-                       "max_minutes":SANDBOX_MAX_MINUTES},
-            "estimated_one_max_session": approximate_usage(
-                SANDBOX_VCPUS * SANDBOX_MAX_MINUTES * 60,
-                SANDBOX_MAX_MINUTES * 60, 0, 0),
-            "billing_data_available":False,
-            "note":"Consumo real deve ser conferido em Vercel Usage."}
+        job_id=mark.pathname.rsplit("/",1)[-1].removesuffix(".json")
+        if not re_job_id(job_id):
+            continue
+        state=await _read_blob(_path(job_id,month))
+        if not state:
+            continue
+        metrics=state.get("usage") or {}
+        cpu_seconds+=float(metrics.get("cpu_seconds") or 0)
+        wall_seconds+=float(metrics.get("wall_seconds") or 0)
+        output_bytes+=int(metrics.get("output_bytes") or 0)
+    # Estoque atual em Blob, não é armazenamento médio faturável no mês.
+    stored_bytes=0
+    async for file in _blob().query_blobs(prefix=f"{ROOT}/jobs/"):
+        if "/output/" in file.pathname:
+            stored_bytes+=file.size
+    overview=approximate_usage(cpu_seconds,wall_seconds,stored_bytes,output_bytes)
+    return {
+        "active_limit":1,
+        "jobs_month":count,"jobs_month_limit":monthly_cap(),
+        "remaining_jobs":max(0,monthly_cap()-count),
+        "worker_configured":configured(),
+        "sandbox":{"vcpus":SANDBOX_VCPUS,"memory_mb":SANDBOX_MEMORY_MB,
+                   "max_minutes":SANDBOX_MAX_MINUTES},
+        "usage":overview,
+        "estimated_one_max_session": approximate_usage(
+            SANDBOX_VCPUS * SANDBOX_MAX_MINUTES * 60,
+            SANDBOX_MAX_MINUTES * 60, 0, 0),
+        "billing_data_available":False,
+        "note":"CPU e transferência estimadas pelo ShortForge. Valores oficiais em Vercel Usage.",
+    }
+
+
+def re_job_id(job_id):
+    return len(job_id)==32 and all(x in "0123456789abcdef" for x in job_id)
 
 
 async def cleanup():

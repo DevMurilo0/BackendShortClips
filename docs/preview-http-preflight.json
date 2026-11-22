@@ -35,5 +35,7 @@
     "local_build_not_billed_as_remote_build": true,
     "http_production_health_reads": 2,
     "official_invoice_available": false
-  }
+  },
+  "historical_snapshot": true,
+  "superseded_by": "preview-deployment-result.json"
 }

@@ -20,6 +20,11 @@ MAX_RESPONSE = 512 * 1024
 ROUTE = re.compile(r"/api/jobs(?:/latest|/[a-f0-9]{8,40}(?:/(?:cancel|retry))?)?$")
 
 
+def credential_matches(supplied: str, expected: str) -> bool:
+    """HTTP headers may contain Latin-1; compare UTF-8 bytes without exceptions."""
+    return hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
+
+
 def config():
     origin = os.getenv("SHORTFORGE_FRONTEND_ORIGIN", "https://short-clips-tan.vercel.app").rstrip("/")
     worker = os.getenv("SHORTFORGE_WORKER_URL", "").rstrip("/")
@@ -100,7 +105,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_json(503, {"error": "Backend de processamento não configurado; geração de Shorts indisponível."})
             return False
         scheme, _, key = self.headers.get("Authorization", "").partition(" ")
-        if scheme.lower() != "bearer" or not hmac.compare_digest(key, cfg["access_key"]):
+        if scheme.lower() != "bearer" or not credential_matches(key, cfg["access_key"]):
             self.send_json(401, {"error": "Chave de acesso inválida ou ausente."})
             return False
         if not cfg["ready"]:
@@ -134,10 +139,12 @@ class handler(BaseHTTPRequestHandler):
         if path == "/api/cleanup":
             expected = os.getenv("CRON_SECRET", "")
             auth = self.headers.get("Authorization", "")
-            if not expected or not hmac.compare_digest(auth, "Bearer " + expected):
+            if not expected or not credential_matches(auth, "Bearer " + expected):
                 return self.send_json(401, {"error":"Não autorizado."})
-            if cfg["mode"] != "sandbox" or not sandbox_engine.namespace_ready():
-                return self.send_json(503, {"error":"Sandbox não habilitado."})
+            # Retention maintenance must keep working while public processing
+            # is paused. Its own secret + namespace guard authorize deletion.
+            if not sandbox_engine.namespace_ready():
+                return self.send_json(503, {"error":"Namespace de limpeza não habilitado."})
             try:
                 return self.send_json(200, asyncio.run(sandbox_engine.cleanup()))
             except Exception:
@@ -173,7 +180,7 @@ class handler(BaseHTTPRequestHandler):
         if path == "/api/internal/finished":
             secret = os.getenv("SHORTFORGE_WORKER_SECRET", "")
             given = self.headers.get("X-ShortForge-Worker-Secret", "")
-            if not secret or not hmac.compare_digest(given, secret):
+            if not secret or not credential_matches(given, secret):
                 return self.send_json(401, {"error":"Não autorizado."})
             try:
                 size = int(self.headers.get("Content-Length","0"))

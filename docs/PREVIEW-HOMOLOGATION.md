@@ -1,7 +1,9 @@
-# Homologação em Preview — proposta aguardando autorização
+# Homologação em Preview — etapa HTTP executada
 
-O ensaio isolado real passou. **Não foi criado deploy Preview.** Nenhuma ação
-abaixo está autorizada implicitamente pelo teste já concluído.
+O ensaio isolado real e a etapa HTTP do Preview foram executados com
+autorizações separadas. Ver PREVIEW-HTTP-VALIDATION.md: 32 checks remotos e
+frontend real sem processamento passaram; correções posteriores estão apenas
+locais. Um segundo deploy e qualquer geração continuam pendentes de autorização.
 
 ## Etapa 1: publicar Preview sem processamento
 

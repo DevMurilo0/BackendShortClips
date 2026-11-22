@@ -1,4 +1,4 @@
-# Deploy Preview HTTP autorizado — configuração pendente de aprovação
+# Deploy Preview HTTP — histórico do plano aprovado
 
 Projeto verificado por CLI: `murilo15/backend-short-clips`,
 `prj_6q8UJw3x8PLQzdxAOMdnovAwqT1P`. Production respondeu ready=false.
@@ -23,8 +23,9 @@ A chave será gerada localmente e nunca será exibida nem enviada como argumento
 literal de comando ou código-fonte. O método de envio será verificado com dry-run
 antes da única chamada de deploy. Arquivos de credenciais ficam fora do pacote.
 
-Essa alteração das variáveis do deployment depende da autorização adicional
-solicitada pelo usuário na condição 10. Nenhum deploy foi executado.
+As três variáveis foram aprovadas explicitamente e o único deployment foi
+executado. Resultado: PREVIEW-HTTP-VALIDATION.md. O restante deste arquivo
+preserva o plano usado; nenhuma variável persistente foi editada.
 
 Correções locais preparadas: modo disabled sempre ready=false e sem proxy;
 autenticação avaliada antes de retornar indisponibilidade quando existe uma

@@ -3,7 +3,9 @@
 API Python leve em Vercel Functions, worker de vídeo em Vercel Sandbox e
 artefatos em Vercel Blob **privado**. O motor permanece desativado por padrão.
 O ensaio real isolado Sandbox/Blob passou; a aplicação ainda não está liberada.
-Falta homologar API/Frontend/Callback em Preview e o mecanismo de retenção.
+O Preview HTTP sem processamento passou em 32 verificações e no fluxo de
+indisponibilidade do frontend real. Correções posteriores ainda estão locais.
+Falta homologar processamento/Callback/downloads ativos e retenção em Preview.
 
 Veja [o ensaio real](docs/CLOUD-INTEGRATION.md) e a
 [proposta de retenção em 24h](docs/RETENTION-24H.md). Leia [o relatório de validação](docs/VALIDATION.md) para resultados, limitações,

@@ -1,0 +1,30 @@
+{
+  "frontend": "https://short-clips-tan.vercel.app",
+  "preview": "https://backend-short-clips-b4j9xdw78-murilo15.vercel.app",
+  "mode": "real_frontend_to_real_disabled_preview",
+  "passed": true,
+  "notice": "Conexão não estabelecida: O servidor existe, mas seu worker de vídeos ainda não está configurado.",
+  "submit_disabled": true,
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "origin": "https://short-clips-tan.vercel.app"
+    }
+  ],
+  "responses": [
+    {
+      "path": "/api/health",
+      "status": 200
+    }
+  ],
+  "page_error_types": [],
+  "no_job_post": true,
+  "credentials_logged": false,
+  "protection_settings_changed": false,
+  "limitations": [
+    "Backend deliberately unavailable; connection refused by UI before authenticated processing.",
+    "No active-generation or download user flow tested.",
+    "OIDC controller header required because Preview is protected."
+  ]
+}

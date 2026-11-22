@@ -149,3 +149,18 @@ no pior alinhamento normal. A decisão operacional deve definir o limite de
 indisponibilidade tolerado; acima dele, não há prova de cumprimento estrito em
 Vercel Blob. O bloqueio de novas admissões evita aumentar o passivo, mas não
 apaga magicamente arquivos de uma tarefa antiga durante indisponibilidade.
+
+
+## Manutenção independente da geração
+
+A revisão posterior ao Preview HTTP encontrou cleanup condicionado ao motor
+ativo. Isso impediria apagar resultados ao pausar geração por manutenção ou
+controle de custos. A condição foi removida **localmente**, mantendo CRON_SECRET
+e o isolamento de namespace obrigatórios; um teste HTTP com simulador confirma
+limpeza autorizada em modo disabled. Chave do usuário continua recusada.
+
+O Preview publicado não recebeu essa alteração e não possui segredo de cron:
+não pode executar limpeza nem agendamentos nesta etapa. Publicar a correção
+exige novo deploy autorizado. Nenhum schedule foi ativado. Essa independência é
+pré-requisito para o futuro SLO de 24h, mas não substitui índice, retries,
+monitoramento e homologação real do scheduler.

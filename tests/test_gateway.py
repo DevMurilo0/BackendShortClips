@@ -157,6 +157,34 @@ class GatewayTest(unittest.TestCase):
                 self.assertEqual(status,405)
                 self.assertIn('Método',data['error'])
 
+    def test_non_ascii_bearer_is_unauthorized_while_disabled(self):
+        with patch.dict(os.environ,{**ENV,'SHORTFORGE_ENGINE':'disabled'},clear=True):
+            status,data=self.query('/api/jobs/latest',key='é')
+            self.assertEqual(status,401)
+            self.assertIn('inválida',data['error'])
+
+    def test_non_ascii_cron_auth_is_unauthorized(self):
+        with patch.dict(os.environ,{**ENV,'CRON_SECRET':'cron-test'},clear=True):
+            self.assertEqual(self.query('/api/cleanup',key='é')[0],401)
+
+    def test_non_ascii_worker_secret_is_unauthorized(self):
+        with patch.dict(os.environ,ENV,clear=True):
+            request=Request(self.root+'/api/internal/finished',method='POST',
+                headers={'X-ShortForge-Worker-Secret':'é','Content-Type':'application/json'},
+                data=json.dumps({'id':'a'*32}).encode())
+            with self.assertRaises(HTTPError) as caught:
+                urlopen(request,timeout=3)
+            self.assertEqual(caught.exception.code,401)
+            caught.exception.close()
+
+    def test_authorized_retention_works_while_engine_is_disabled(self):
+        env={**ENV,'SHORTFORGE_ENGINE':'disabled','VERCEL_ENV':'preview','CRON_SECRET':'cron-test'}
+        with patch.dict(os.environ,env,clear=True),patch.object(gateway.sandbox_engine,'ROOT','shortforge-preview/retention-test'),patch.object(gateway.sandbox_engine,'cleanup',new_callable=AsyncMock,return_value={'expired_jobs':0}) as cleanup:
+            status,data=self.query('/api/cleanup',key='cron-test')
+            self.assertEqual(status,200)
+            self.assertEqual(data,{'expired_jobs':0})
+            cleanup.assert_awaited_once()
+
     def test_storage_not_misrepresented(self):
         with patch.dict(os.environ, ENV, clear=True):
             self.assertEqual(self.query('/downloads/aabbccdd/short_01.mp4',key='client-secret')[0], 501)

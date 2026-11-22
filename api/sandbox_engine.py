@@ -134,6 +134,9 @@ async def submit(payload: dict) -> dict:
     if not configured():
         raise RuntimeError("O Sandbox não foi habilitado ou não possui armazenamento/credenciais.")
     opts = validate_job(payload)
+    if opts.get("manual_box"):
+        # O formulário usa porcentagens; Job/identify_facecam esperam 0–1.
+        opts["manual_box"] = [float(value)/100 for value in opts["manual_box"]]
     await _quota()
     job_id = secrets.token_hex(16)
     await _acquire_lock(job_id)

@@ -18,7 +18,7 @@ ROUTE = re.compile(r"/api/jobs(?:/latest|/[a-f0-9]{8,40}(?:/(?:cancel|retry))?)?
 
 
 def config():
-    origin = os.getenv("SHORTFORGE_FRONTEND_ORIGIN", "").rstrip("/")
+    origin = os.getenv("SHORTFORGE_FRONTEND_ORIGIN", "https://short-clips-tan.vercel.app").rstrip("/")
     worker = os.getenv("SHORTFORGE_WORKER_URL", "").rstrip("/")
     access_key = os.getenv("SHORTFORGE_PUBLIC_ACCESS_KEY", "")
     worker_secret = os.getenv("SHORTFORGE_WORKER_SECRET", "")

@@ -19,8 +19,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Validate Python API
         run: |
-          python -m py_compile api/index.py
+          python -m py_compile api/index.py api/policy.py api/sandbox_engine.py worker/runner.py
           python -m unittest discover -s tests -v
+      - name: Validate signed download function
+        run: node --check api/download.js
       - name: Validate Vercel configuration
         run: |
           python - <<'PY'
@@ -29,6 +31,7 @@ jobs:
           config=json.loads(Path('vercel.json').read_text())
           assert config['version']==2
           assert 'api/index.py' in config['functions']
+          assert any(c['path']=='/api/cleanup' for c in config.get('crons',[]))
           assert any(r['source']=='/api/:path*' for r in config['rewrites'])
           print('Vercel configuration: OK')
           PY

@@ -28,7 +28,11 @@ if ! command -v ffmpeg >/dev/null || ! command -v tesseract >/dev/null || ! comm
   if command -v sudo >/dev/null; then sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg tesseract-ocr git;
   else apt-get update -qq && apt-get install -y -qq ffmpeg tesseract-ocr git; fi
 fi
-git clone --depth 1 https://github.com/DevMurilo0/ShortClips.git shortforge-source
+# Clonagem parcial: não baixa GB de vídeos e imagens de validação do GitHub.
+git clone --depth 1 --filter=blob:none --sparse https://github.com/DevMurilo0/ShortClips.git shortforge-source
+cd /tmp/shortforge-source
+git sparse-checkout set shortforge modelos/tessdata requirements.txt
+cd /tmp
 git clone --depth 1 https://github.com/DevMurilo0/BackendShortClips.git shortforge-backend
 python -m venv /tmp/sfvenv
 /tmp/sfvenv/bin/pip install --disable-pip-version-check --no-cache-dir vercel-blob

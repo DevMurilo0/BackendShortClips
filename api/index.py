@@ -4,10 +4,13 @@ Video processing must happen on an authenticated long-running worker.
 No MP4 is processed or stored inside a Vercel serverless function.
 """
 from http.server import BaseHTTPRequestHandler
+import asyncio
 import hmac
 import json
 import os
 import re
+from . import sandbox_engine
+from .policy import RequestRejected, validate_job
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
@@ -26,12 +29,15 @@ def config():
     valid_url = (parsed.scheme == "https" and bool(parsed.netloc) and
                  not parsed.username and not parsed.password and
                  parsed.path in ("", "/") and not parsed.query and not parsed.fragment)
+    mode = "sandbox" if sandbox_engine.enabled() else "gateway"
+    ready = sandbox_engine.configured() if mode == "sandbox" else bool(origin and valid_url and access_key and worker_secret)
     return {
+        "mode": mode,
         "origin": origin,
         "worker": worker if valid_url else "",
         "access_key": access_key,
         "worker_secret": worker_secret,
-        "ready": bool(origin and valid_url and access_key and worker_secret),
+        "ready": ready,
     }
 
 
@@ -49,7 +55,7 @@ def requested_path(raw_path):
     if len(routes) != 1:
         return parsed.path
     route = routes[0]
-    if route == "health" or ROUTE.fullmatch("/api/" + route):
+    if route in ("health","usage","cleanup","internal/finished") or ROUTE.fullmatch("/api/" + route):
         return "/api/" + route
     return parsed.path
 
@@ -106,11 +112,41 @@ class handler(BaseHTTPRequestHandler):
         cfg = config()
         if path == "/api/health":
             return self.send_json(200, {
-                "ok": True, "service": "BackendShortClips", "ready": cfg["ready"],
-                "reason": None if cfg["ready"] else "Worker ainda não configurado.",
+                "ok": True, "service": "BackendShortClips",
+                "mode": cfg["mode"], "ready": cfg["ready"],
+                "limits": {"clips":5,"seconds":45,"resolution":720,"concurrency":1},
+                "reason": None if cfg["ready"] else
+                    "Worker ainda não configurado; nenhuma tarefa é iniciada.",
             })
+        if path == "/api/cleanup":
+            expected = os.getenv("CRON_SECRET", "")
+            auth = self.headers.get("Authorization", "")
+            if not expected or not hmac.compare_digest(auth, "Bearer " + expected):
+                return self.send_json(401, {"error":"Não autorizado."})
+            if cfg["mode"] != "sandbox":
+                return self.send_json(503, {"error":"Sandbox não habilitado."})
+            try:
+                return self.send_json(200, asyncio.run(sandbox_engine.cleanup()))
+            except Exception:
+                return self.send_json(502, {"error":"Falha na limpeza; tente novamente."})
         if not self.check_auth(cfg):
             return
+        if cfg["mode"] == "sandbox":
+            try:
+                if path == "/api/usage":
+                    return self.send_json(200, asyncio.run(sandbox_engine.usage()))
+                if path == "/api/jobs/latest":
+                    job = asyncio.run(sandbox_engine.latest_job())
+                else:
+                    match = re.fullmatch(r"/api/jobs/([a-f0-9]{32})",path)
+                    if not match:
+                        return self.send_json(404, {"error":"Rota desconhecida."})
+                    job = asyncio.run(sandbox_engine.get_job(match.group(1)))
+                if job is None:
+                    return self.send_json(404, {"error":"Tarefa não encontrada."})
+                return self.send_json(200, {"job":job})
+            except Exception:
+                return self.send_json(502, {"error":"Não foi possível acessar o estado dos vídeos."})
         if path.startswith("/downloads/"):
             return self.send_json(501, {"error": "Downloads exigem armazenamento externo com URLs assinadas."})
         if not ROUTE.fullmatch(path):
@@ -119,9 +155,29 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         cfg = config()
+        path = requested_path(self.path)
+        if path == "/api/internal/finished":
+            secret = os.getenv("SHORTFORGE_WORKER_SECRET", "")
+            given = self.headers.get("X-ShortForge-Worker-Secret", "")
+            if not secret or not hmac.compare_digest(given, secret):
+                return self.send_json(401, {"error":"Não autorizado."})
+            try:
+                size = int(self.headers.get("Content-Length","0"))
+                if not 1 <= size <= 1024:
+                    raise ValueError()
+                job_id = json.loads(self.rfile.read(size)).get("id","")
+                if not re.fullmatch(r"[a-f0-9]{32}",job_id):
+                    raise ValueError()
+                if cfg["mode"] != "sandbox":
+                    return self.send_json(503, {"error":"Sandbox não habilitado."})
+                result = asyncio.run(sandbox_engine.finalize(job_id))
+                return self.send_json(200, result)
+            except (ValueError,TypeError):
+                return self.send_json(400, {"error":"Pedido inválido."})
+            except Exception:
+                return self.send_json(502, {"error":"Não foi possível finalizar o worker."})
         if not self.check_auth(cfg):
             return
-        path = requested_path(self.path)
         if path != "/api/jobs" and not re.fullmatch(r"/api/jobs/[a-f0-9]{8,40}/(?:cancel|retry)", path):
             return self.send_json(404, {"error": "Rota não encontrada."})
         try:
@@ -134,6 +190,27 @@ class handler(BaseHTTPRequestHandler):
                 raise ValueError("JSON precisa ser objeto.")
         except (ValueError, TypeError):
             return self.send_json(400, {"error": "JSON de entrada inválido."})
+        if cfg["mode"] == "sandbox":
+            if path == "/api/jobs":
+                try:
+                    job = asyncio.run(sandbox_engine.submit(payload))
+                    return self.send_json(201, {"job":job})
+                except RequestRejected as exc:
+                    message=str(exc)
+                    status=429 if "mensal" in message else (409 if "andamento" in message or "ativo" in message else 400)
+                    return self.send_json(status, {"error":message})
+                except Exception:
+                    return self.send_json(503, {"error":"Sandbox ou armazenamento indisponível. Nenhuma tarefa foi concluída."})
+            match = re.fullmatch(r"/api/jobs/([a-f0-9]{32})/(cancel|retry)",path)
+            if not match:
+                return self.send_json(404, {"error":"Tarefa inválida."})
+            if match.group(2) == "retry":
+                return self.send_json(501, {"error":"Repetição isolada de cortes não está habilitada no worker cloud."})
+            try:
+                job = asyncio.run(sandbox_engine.cancel(match.group(1)))
+                return self.send_json(200, {"job":job}) if job else self.send_json(404, {"error":"Tarefa não encontrada."})
+            except Exception:
+                return self.send_json(502, {"error":"Falha ao cancelar a tarefa."})
         return self.proxy("POST", cfg, path, body)
 
     def proxy(self, method, cfg, path, body=None):

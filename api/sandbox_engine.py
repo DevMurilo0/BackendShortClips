@@ -244,6 +244,24 @@ async def cancel(job_id):
     return job
 
 
+async def finalize(job_id: str):
+    """Callback autenticado: encerra VM somente após arquivo de estado final."""
+    job = await get_job(job_id)
+    if not job:
+        return {"ok":False,"reason":"Tarefa inexistente."}
+    if job.get("status") not in ("completed","failed","partial","cancelled","expired"):
+        return {"ok":False,"reason":"Tarefa ainda está em execução."}
+    try:
+        sandbox,_ = _sandbox()
+        box = await sandbox.get_sandbox(name="shortforge-" + job_id)
+        await box.stop()
+    except Exception:
+        pass  # O timeout de 42 minutos ainda garante o encerramento.
+    await _release_lock(job_id)
+    return {"ok":True,"id":job_id,"status":job["status"]}
+
+
+
 async def usage():
     prefix = f"{ROOT}/quota/{period_key()}/"
     count=0

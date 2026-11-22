@@ -31,7 +31,7 @@ fi
 # Clonagem parcial: não baixa GB de vídeos e imagens de validação do GitHub.
 git clone --depth 1 --filter=blob:none --sparse https://github.com/DevMurilo0/ShortClips.git shortforge-source
 cd /tmp/shortforge-source
-git sparse-checkout set shortforge modelos/tessdata requirements.txt
+git sparse-checkout set shortforge modelos
 cd /tmp
 git clone --depth 1 https://github.com/DevMurilo0/BackendShortClips.git shortforge-backend
 python -m venv /tmp/sfvenv

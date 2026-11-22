@@ -127,3 +127,25 @@ serviço ou integração. Essa alternativa também exige aceite e teste reais.
 - https://upstash.com/docs/qstash/features/delay
 - https://upstash.com/docs/qstash/features/retry
 - https://upstash.com/pricing/qstash
+
+
+## Verificação adicional antes do Preview HTTP
+
+O pacote do Preview HTTP será publicado sem `crons` ou `schedules`; a retenção
+não será exercitada remotamente nesta etapa. Seu namespace não contém tarefas,
+e os endpoints de geração, estado e download ficam indisponíveis após validar
+as credenciais. Nenhuma chamada de Blob é necessária para essa homologação.
+
+Para uma verificação posterior do prazo, medir `deleted_at - started_at` e
+exigir `deletion.verified=true` e `past_24h_deadline=false`. Um relógio controlado
+valida os cortes, mas não comprova pontualidade do scheduler: esta depende de
+uma janela real autorizada. Se o objetivo for medido desde o término da tarefa
+em vez da criação, isso precisa ser decidido antes de alterar o contrato atual,
+que usa `started_at`. Contar desde a criação é conservador para o teto de 24h.
+
+A margem de duas horas não é ilimitada: alinhamento de 15min, jitter de 15min
+e uma Function de até 60s deixam aproximadamente 89min para falhas/recuperação
+no pior alinhamento normal. A decisão operacional deve definir o limite de
+indisponibilidade tolerado; acima dele, não há prova de cumprimento estrito em
+Vercel Blob. O bloqueio de novas admissões evita aumentar o passivo, mas não
+apaga magicamente arquivos de uma tarefa antiga durante indisponibilidade.

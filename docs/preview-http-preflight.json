@@ -1,0 +1,39 @@
+{
+  "status": "awaiting_deployment_variable_approval",
+  "deployment_created": false,
+  "deployment_attempts": 0,
+  "preview_url": null,
+  "project": "murilo15/backend-short-clips",
+  "namespace": "shortforge-preview/http-54d28e4b4113",
+  "variables_pending": [
+    "SHORTFORGE_ENGINE",
+    "SHORTFORGE_STORAGE_PREFIX",
+    "SHORTFORGE_PUBLIC_ACCESS_KEY"
+  ],
+  "persistent_project_variables_modified": false,
+  "production_health_after_preparation": {
+    "ok": true,
+    "mode": "gateway",
+    "ready": false
+  },
+  "sandboxes_created": 0,
+  "cron_or_schedules_enabled": false,
+  "blob_operations_executed": false,
+  "local_validation": {
+    "python_passed": 63,
+    "python_skipped": 0,
+    "node_passed": 14,
+    "isolated_preview_build": true,
+    "dry_run": true,
+    "package_without_crons_or_schedules": true,
+    "env_files_excluded": true
+  },
+  "remote_http_homologation": "not_executed_without_deployment",
+  "billing_observed": {
+    "sandbox_compute": 0,
+    "deployment_build": 0,
+    "local_build_not_billed_as_remote_build": true,
+    "http_production_health_reads": 2,
+    "official_invoice_available": false
+  }
+}

@@ -29,8 +29,11 @@ def config():
     valid_url = (parsed.scheme == "https" and bool(parsed.netloc) and
                  not parsed.username and not parsed.password and
                  parsed.path in ("", "/") and not parsed.query and not parsed.fragment)
-    mode = "sandbox" if sandbox_engine.enabled() else "gateway"
+    explicitly_disabled = os.getenv("SHORTFORGE_ENGINE", "").lower() == "disabled"
+    mode = "disabled" if explicitly_disabled else ("sandbox" if sandbox_engine.enabled() else "gateway")
     ready = sandbox_engine.configured() if mode == "sandbox" else bool(origin and valid_url and access_key and worker_secret)
+    if explicitly_disabled:
+        ready = False  # Never proxy to another worker when explicitly paused.
     return {
         "mode": mode,
         "origin": origin,
@@ -79,19 +82,29 @@ class handler(BaseHTTPRequestHandler):
         for key, value in (extra or {}).items():
             self.send_header(key, value)
         self.end_headers()
-        self.wfile.write(raw)
+        if self.command != "HEAD":
+            self.wfile.write(raw)
+
+    def method_not_allowed(self):
+        self.send_json(405, {"error":"Método não permitido."},
+                       {"Allow":"GET, POST, OPTIONS"})
+
+    do_PUT = do_DELETE = do_PATCH = do_HEAD = method_not_allowed
 
     def check_auth(self, cfg):
         origin = self.headers.get("Origin", "").rstrip("/")
         if origin and origin != cfg["origin"]:
             self.send_json(403, {"error": "Origem não permitida."})
             return False
-        if not cfg["ready"]:
+        if not cfg["access_key"]:
             self.send_json(503, {"error": "Backend de processamento não configurado; geração de Shorts indisponível."})
             return False
         scheme, _, key = self.headers.get("Authorization", "").partition(" ")
         if scheme.lower() != "bearer" or not hmac.compare_digest(key, cfg["access_key"]):
             self.send_json(401, {"error": "Chave de acesso inválida ou ausente."})
+            return False
+        if not cfg["ready"]:
+            self.send_json(503, {"error": "Backend de processamento não configurado; geração de Shorts indisponível."})
             return False
         return True
 

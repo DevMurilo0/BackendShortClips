@@ -60,3 +60,16 @@ test('Production rejects a Preview namespace',async()=>{
     const f=fixture();await createHandler(f.storage)(f.req,f.res);assert.equal(f.res.statusCode,503);
   });
 });
+
+
+test('disabled engine authenticates first and never accesses Blob',async()=>{
+  const previous=process.env.SHORTFORGE_ENGINE;process.env.SHORTFORGE_ENGINE='disabled';
+  try{
+    let accessed=false;
+    const f=fixture();f.storage.get=async()=>{accessed=true;throw Error('must not read')};
+    delete f.req.headers.authorization;
+    await createHandler(f.storage)(f.req,f.res);assert.equal(f.res.statusCode,401);
+    f.req.headers.authorization='Bearer '+key;
+    await createHandler(f.storage)(f.req,f.res);assert.equal(f.res.statusCode,503);assert.equal(accessed,false);
+  }finally{process.env.SHORTFORGE_ENGINE=previous}
+});

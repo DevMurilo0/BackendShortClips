@@ -23,8 +23,6 @@ return async function handler(req, res) {
   }
   if (req.method !== 'GET') return res.status(405).json({error:'Método inválido.'});
   if (origin && origin !== allowed) return res.status(403).json({error:'Origem não permitida.'});
-  if (process.env.SHORTFORGE_ENGINE !== 'sandbox')
-    return res.status(503).json({error:'Motor de processamento desativado.'});
   const expected = process.env.SHORTFORGE_PUBLIC_ACCESS_KEY;
   // Tempo constante para não divulgar detalhes da chave de acesso.
   const supplied=(req.headers.authorization || '').replace(/^Bearer /i, '');
@@ -32,6 +30,8 @@ return async function handler(req, res) {
     timingSafeEqual(Buffer.from(supplied),Buffer.from(expected));
   if (!equal)
     return res.status(401).json({error:'Chave de acesso inválida.'});
+  if (process.env.SHORTFORGE_ENGINE !== 'sandbox')
+    return res.status(503).json({error:'Motor de processamento desativado.'});
   const root=process.env.SHORTFORGE_STORAGE_PREFIX || 'shortforge';
   const environment=process.env.VERCEL_ENV;
   if (!/^shortforge(?:-preview\/[a-z0-9][a-z0-9-]{0,47})?$/.test(root) ||

@@ -139,6 +139,24 @@ class GatewayTest(unittest.TestCase):
             self.assertEqual(status,503)
             cleanup.assert_not_awaited()
 
+    def test_disabled_preview_checks_auth_without_processing_or_proxy(self):
+        env={**ENV,'SHORTFORGE_ENGINE':'disabled','VERCEL_ENV':'preview'}
+        with patch.dict(os.environ,env,clear=True),patch.object(gateway,'urlopen') as outgoing:
+            status,data=self.query('/api/health')
+            self.assertEqual((status,data['mode'],data['ready']),(200,'disabled',False))
+            self.assertEqual(self.query('/api/jobs/latest')[0],401)
+            self.assertEqual(self.query('/api/jobs/latest',key='wrong')[0],401)
+            self.assertEqual(self.query('/api/jobs/latest',key='client-secret')[0],503)
+            self.assertEqual(self.query('/api/jobs','POST',{'url':'https://youtu.be/yWvnOWILFk0'},key='client-secret')[0],503)
+            outgoing.assert_not_called()
+
+    def test_unsupported_http_methods_return_json_405(self):
+        with patch.dict(os.environ,ENV,clear=True):
+            for method in ('PUT','DELETE','PATCH'):
+                status,data=self.query('/api/health',method=method)
+                self.assertEqual(status,405)
+                self.assertIn('Método',data['error'])
+
     def test_storage_not_misrepresented(self):
         with patch.dict(os.environ, ENV, clear=True):
             self.assertEqual(self.query('/downloads/aabbccdd/short_01.mp4',key='client-secret')[0], 501)

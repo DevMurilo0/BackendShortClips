@@ -1,0 +1,10 @@
+{
+  "name": "backend-shortclips",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "ShortForge private Blob signed downloads",
+  "dependencies": {
+    "@vercel/blob": "^2.0.0"
+  }
+}

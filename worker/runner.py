@@ -88,8 +88,13 @@ async def main():
 
     try:
         state.update(status="running", stage="analyzing",
-                     message="Preparação concluída; analisando vídeo no Sandbox.")
+                     message="Preparação concluída; verificando metadados do vídeo.")
         await save(state_path,state)
+        from shortforge.media import metadata_youtube
+        metadata=await asyncio.to_thread(metadata_youtube,job.url,lambda _: None)
+        duration=float(metadata.get("duration") or 0)
+        if duration < 30 or duration > 6*3600:
+            raise RuntimeError("Limite Hobby: vídeos devem ter entre 30 segundos e 6 horas.")
         task = asyncio.create_task(asyncio.to_thread(execute, job))
         # Relatório a cada 7 segundos para reduzir operações no Blob.
         while not task.done():
@@ -132,6 +137,7 @@ async def main():
             state["status"]="completed" if success == 5 else ("partial" if success else "failed")
             state["progress"]=int(100*success/5)
             state["message"]=f"{success} de 5 Shorts armazenados e prontos para download."
+            state["stage"]=state["status"]
         if job.status in ("failed","cancelled"):
             state["status"]=job.status
             state["message"]=job.message

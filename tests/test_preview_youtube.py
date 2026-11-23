@@ -31,6 +31,22 @@ class AuthorizedPreviewTests(unittest.TestCase):
         with patch.dict(os.environ, {**ENV, "BLOB_READ_WRITE_TOKEN":"[SENSITIVE]"}, clear=True), patch.object(engine, "ROOT", ROOT):
             self.assertFalse(engine.configured())
 
+    def test_vercel_runtime_automation_bypass_without_extra_secret(self):
+        # A Vercel pode disponibilizar o segredo de automação diretamente
+        # no runtime; não é necessário duplicá-lo no projeto.
+        runtime = {k:v for k,v in ENV.items()
+                   if k != 'SHORTFORGE_VERCEL_PROTECTION_BYPASS'}
+        runtime['VERCEL_AUTOMATION_BYPASS_SECRET'] = 'preview-runtime-bypass'
+        with patch.dict(os.environ, runtime, clear=True), patch.object(engine, 'ROOT', ROOT):
+            self.assertTrue(engine.configured())
+            self.assertEqual(engine.preview_protection_bypass(), 'preview-runtime-bypass')
+        runtime['VERCEL_AUTOMATION_BYPASS_SECRET'] = '[SENSITIVE]'
+        with patch.dict(os.environ, runtime, clear=True), patch.object(engine, 'ROOT', ROOT):
+            self.assertFalse(engine.configured())
+        runtime.pop('VERCEL_AUTOMATION_BYPASS_SECRET')
+        with patch.dict(os.environ, runtime, clear=True), patch.object(engine, 'ROOT', ROOT):
+            self.assertFalse(engine.configured())
+
     def test_bad_requests_never_acquire_lock(self):
         with patch.dict(os.environ, ENV, clear=True), patch.object(engine, 'ROOT', ROOT), \
              patch.object(engine, '_acquire_lock', new_callable=AsyncMock) as lock:

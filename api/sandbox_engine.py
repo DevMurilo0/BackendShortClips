@@ -50,6 +50,16 @@ def enabled() -> bool:
     return os.getenv("SHORTFORGE_ENGINE", "").lower() == "sandbox"
 
 
+def preview_protection_bypass() -> str:
+    """Use an explicitly configured bypass or Vercel's runtime automation bypass.
+
+    Vercel supplies VERCEL_AUTOMATION_BYPASS_SECRET when its Deployment
+    Protection automation bypass is configured. Never expose this to the UI.
+    """
+    return (os.getenv("SHORTFORGE_VERCEL_PROTECTION_BYPASS", "")
+            or os.getenv("VERCEL_AUTOMATION_BYPASS_SECRET", ""))
+
+
 def preview_synthetic_source() -> str | None:
     """Preview-only, operator-configured private test input; never client-controlled."""
     import re
@@ -114,7 +124,7 @@ def configured() -> bool:
         youtube_source = preview_youtube_source()
         # An active Preview must never fall back to unrestricted 42-minute jobs.
         if enabled() and os.getenv("VERCEL_ENV") == "preview":
-            if not (test_source or youtube_source) or not os.getenv("SHORTFORGE_VERCEL_PROTECTION_BYPASS"):
+            if not (test_source or youtube_source) or not preview_protection_bypass():
                 return False
             preview_callback_url()
     except (RuntimeError, ValueError):
@@ -125,7 +135,8 @@ def configured() -> bool:
                 and os.getenv("BLOB_READ_WRITE_TOKEN")
                 and not any("[SENSITIVE]" in os.getenv(name, "") for name in (
                     "BLOB_READ_WRITE_TOKEN", "SHORTFORGE_PUBLIC_ACCESS_KEY",
-                    "SHORTFORGE_WORKER_SECRET", "SHORTFORGE_VERCEL_PROTECTION_BYPASS"))
+                    "SHORTFORGE_WORKER_SECRET"))
+                and "[SENSITIVE]" not in preview_protection_bypass()
                 and len(user_key) >= 32 and len(worker_key) >= 32
                 and user_key != worker_key
                 and os.getenv("SHORTFORGE_FRONTEND_ORIGIN", "https://short-clips-tan.vercel.app"))
@@ -264,7 +275,7 @@ async def submit(payload: dict) -> dict:
                 or opts["length"] != 30 or not opts.get("manual_box")):
             raise RequestRejected("Ensaio isolado: somente 1 Short de 30s com facecam manual.")
         preview_callback_url()
-        if not os.getenv("SHORTFORGE_VERCEL_PROTECTION_BYPASS"):
+        if not preview_protection_bypass():
             raise RuntimeError("Falta credencial privada para callback do Preview protegido.")
     if opts.get("manual_box"):
         # O formulário usa porcentagens; Job/identify_facecam esperam 0–1.
@@ -338,8 +349,7 @@ async def submit(payload: dict) -> dict:
             env["SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE"] = youtube_source
         if controlled:
             env["SHORTFORGE_PUBLIC_API_URL"] = preview_callback_url()
-            env["SHORTFORGE_VERCEL_PROTECTION_BYPASS"] = os.environ[
-                "SHORTFORGE_VERCEL_PROTECTION_BYPASS"]
+            env["SHORTFORGE_VERCEL_PROTECTION_BYPASS"] = preview_protection_bypass()
         # create_command é detached: a Function responde sem esperar 5 Shorts.
         await box.create_command("python3", ["-c", BOOTSTRAP],
                                  env=env, stdout=-3, stderr=-3)

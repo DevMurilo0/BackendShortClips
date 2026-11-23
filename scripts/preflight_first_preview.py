@@ -14,8 +14,8 @@ import sys
 from api.policy import canonical_youtube, RequestRejected
 
 AUTHORIZED_URL = "https://youtu.be/NZRCjPMb0AY"
-MAX_SOURCE_SECONDS = 120
-MAX_SOURCE_BYTES = 128 * 1024 * 1024
+MAX_SOURCE_SECONDS = 6 * 3600
+# Limit *downloaded audio/selected section*, not the metadata size of a 6h source.
 
 
 def validate_metadata(metadata: dict) -> dict:
@@ -40,14 +40,11 @@ def validate_metadata(metadata: dict) -> dict:
             or not math.isfinite(duration) or
             not 30 <= duration <= MAX_SOURCE_SECONDS):
         raise ValueError(
-            "Vídeo fora da janela autorizada: este Preview aceita fontes entre "
-            "30 e 120 segundos. Nenhum Sandbox deve ser criado.")
-    for key in ("filesize", "filesize_approx"):
-        size = metadata.get(key)
-        if size is not None and (isinstance(size, bool)
-                or not isinstance(size, (int, float)) or not math.isfinite(size)
-                or size < 0 or size > MAX_SOURCE_BYTES):
-            raise ValueError("Fonte maior que 128 MiB ou tamanho inválido.")
+            "Vídeo fora da janela autorizada: aceitamos fontes entre "
+            "30 segundos e 6 horas. Nenhum Sandbox deve ser criado.")
+    # Do not reject long input because its original 1080p filesize is huge:
+    # only a bounded bestaudio and the final selected 30-second section are
+    # downloaded in the cloud. Their size and runtime have separate limits.
     return {"id": "NZRCjPMb0AY", "duration_seconds": round(duration, 2),
             "source_bounded": True, "media_downloaded": False,
             "sandbox_created": False}

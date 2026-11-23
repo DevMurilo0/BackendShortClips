@@ -38,7 +38,8 @@ jobs:
           config=json.loads(Path('vercel.json').read_text())
           assert config['version']==2
           assert 'api/index.py' in config['functions']
-          assert any(c['path']=='/api/cleanup' for c in config.get('crons',[]))
+          assert not config.get('crons')
+          assert not config.get('schedules')
           assert any(r['source']=='/api/jobs/:job_id' for r in config['rewrites'])
           assert config['rewrites'][0]['destination']=='/api/download.js'
           print('Vercel configuration: OK')

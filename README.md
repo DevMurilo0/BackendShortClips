@@ -48,3 +48,43 @@ ela precisa ser construída e homologada antes de configurar sua referência.
 `scripts/cloud_smoke.py --execute` consome infraestrutura e só deve ser
 executado após autorização; sem o parâmetro não faz operações remotas.
 Não habilitar `SHORTFORGE_ENGINE=sandbox` em Production sem aprovação explícita.
+
+## Executar no computador, sem Vercel
+
+Neste checkout, com `../ShortClips_Cloud` na branch `feat/local-dev-integration`:
+
+```bash
+./start-local.sh
+# ou: ./start-local.sh --background
+```
+
+Abra http://localhost:5173. Health da API: http://localhost:8000/api/health.
+As URLs reais são impressas se uma porta estiver ocupada. Encerre com `Ctrl+C`
+no modo foreground ou `./stop-local.sh` a partir deste checkout.
+`SHORTFORGE_FRONTEND_DIR` permite selecionar outro diretório do frontend.
+
+A API local reutiliza `ShortClips_Cloud/app.py` e seu pipeline Python existente;
+as Functions cloud deste repositório não são iniciadas. O proxy local autentica
+as chamadas à API com chave somente em memória; o navegador usa `/api/...` e
+`/downloads/...` na origem do frontend. A API e a interface escutam apenas em
+loopback. Nenhum Sandbox, Blob ou `.env` é utilizado pelo modo local.
+
+Comece com um vídeo individual HTTPS autorizado de 30–120s, com fala, para gerar
+um Short de 30s em 720p. Confirme os direitos na interface. Os resultados são
+salvos em `../ShortClips_Cloud/resultados-local/`, sem alterar os anteriores.
+O modo local aceita até cinco cortes, mas o ensaio inicial deve ser pequeno.
+Whisper base CPU/int8 e OCR português foram carregados/verificados; desempenho e
+qualidade de um vídeo autorizado ainda dependem de teste real.
+
+Verificações sem iniciar processamento:
+
+```bash
+python scripts/local_http_check.py
+../ShortForge_Local/.venv/bin/python scripts/local_browser_check.py
+```
+
+O segundo comando utiliza Playwright/Chromium já instalados no ambiente existente.
+Os testes rejeitam fontes inválidas sem baixar vídeos. Não criam tarefas falsas.
+Resultados e limites desta rodada: [local-development-validation.json](docs/local-development-validation.json).
+Geração, legendas, playback e downloads de MP4/ZIP reais continuam pendentes até
+fornecer uma fonte autorizada; testes unitários não comprovam esse fluxo completo.

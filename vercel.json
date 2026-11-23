@@ -45,12 +45,6 @@
       "excludeFiles": "{.env*,.vercel/**,docs/**,scripts/**,tests/**,teste-blob.txt,worker/modelos/**,**/__pycache__/**,**/*.pyc}"
     }
   },
-  "crons": [
-    {
-      "path": "/api/cleanup",
-      "schedule": "0 3 * * *"
-    }
-  ],
   "installCommand": "npm ci --omit=dev",
   "framework": null
 }

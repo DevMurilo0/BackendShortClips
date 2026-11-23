@@ -1,0 +1,196 @@
+{
+  "date": "2026-11-22",
+  "backend_branch": "feat/preview-authorized-youtube",
+  "frontend_branch": "feat/local-dev-integration",
+  "frontend_commit": "171804a5dcd3694632c18967e4851399d468937e",
+  "reused_commits": {
+    "backend": "42607f5",
+    "frontend": "160c5ce"
+  },
+  "automated_tests": {
+    "backend_python": {
+      "run": 81,
+      "skipped": 2,
+      "passed": 79
+    },
+    "backend_node": {
+      "passed": 14
+    },
+    "frontend_python": {
+      "run": 46,
+      "passed": 46
+    },
+    "frontend_javascript_syntax": "passed"
+  },
+  "test_limits": [
+    "Unit suites include mocks and a synthetic FFmpeg regression. They are not evidence of authorized YouTube processing.",
+    "Live checks only issue read requests and rejected job submissions; no real task was created."
+  ],
+  "http": [
+    {
+      "check": "frontend",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "backend-health",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "proxy-latest",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "check": "direct-auth",
+      "status": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "check": "direct-download-auth",
+      "status": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "check": "unknown-job",
+      "status": 404,
+      "expected": 404,
+      "passed": true
+    },
+    {
+      "check": "missing-download",
+      "status": 404,
+      "expected": 404,
+      "passed": true
+    },
+    {
+      "check": "bad-source",
+      "status": 400,
+      "expected": 400,
+      "passed": true
+    },
+    {
+      "check": "missing-rights",
+      "status": 400,
+      "expected": 400,
+      "passed": true
+    },
+    {
+      "check": "foreign-origin",
+      "status": 403,
+      "expected": 403,
+      "passed": true
+    },
+    {
+      "check": "cors-allowed",
+      "status": 204,
+      "expected": 204,
+      "passed": true
+    },
+    {
+      "check": "cors-denied",
+      "status": 403,
+      "expected": 403,
+      "passed": true
+    }
+  ],
+  "browser": {
+    "url": "http://localhost:5173",
+    "viewports": [
+      {
+        "width": 390,
+        "overflow": false,
+        "error_notice": "Cole um link válido de um vídeo do YouTube.",
+        "submit_reenabled": true,
+        "health": {
+          "status": 200,
+          "body": {
+            "ok": true,
+            "service": "ShortForge Local"
+          }
+        }
+      },
+      {
+        "width": 1280,
+        "overflow": false,
+        "error_notice": "Cole um link válido de um vídeo do YouTube.",
+        "submit_reenabled": true,
+        "health": {
+          "status": 200,
+          "body": {
+            "ok": true,
+            "service": "ShortForge Local"
+          }
+        }
+      }
+    ],
+    "page_errors": [],
+    "api_requests": [
+      {
+        "method": "GET",
+        "path": "/api/jobs/latest",
+        "origin": "localhost:5173"
+      },
+      {
+        "method": "POST",
+        "path": "/api/jobs",
+        "origin": "localhost:5173"
+      },
+      {
+        "method": "GET",
+        "path": "/api/health",
+        "origin": "localhost:5173"
+      },
+      {
+        "method": "GET",
+        "path": "/api/jobs/latest",
+        "origin": "localhost:5173"
+      },
+      {
+        "method": "POST",
+        "path": "/api/jobs",
+        "origin": "localhost:5173"
+      },
+      {
+        "method": "GET",
+        "path": "/api/health",
+        "origin": "localhost:5173"
+      }
+    ]
+  },
+  "dependencies": {
+    "existing_venv": "../ShortForge_Local/.venv",
+    "media_imports": "passed",
+    "ocr_portuguese": "downloaded locally and checksum verified",
+    "whisper_base_cpu_int8": "loaded from local cache",
+    "system_configuration_changed": false
+  },
+  "lifecycle": {
+    "stop_command_passed": true,
+    "both_ports_confirmed_closed_after_stop": true,
+    "restarted_and_left_running": true,
+    "urls": [
+      "http://localhost:5173",
+      "http://localhost:8000"
+    ]
+  },
+  "pending": [
+    "Authorized YouTube URL and rights confirmation",
+    "Real task creation and state progression",
+    "Real MP4 audio, subtitles and vertical dimensions",
+    "Browser playback and MP4/ZIP downloads from authorized processing"
+  ],
+  "cloud_actions": {
+    "deployments": 0,
+    "sandbox_creations": 0,
+    "blob_accesses": 0,
+    "pushes": 0,
+    "production_changes": 0
+  }
+}

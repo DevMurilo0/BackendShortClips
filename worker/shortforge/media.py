@@ -101,7 +101,7 @@ def metadata_youtube(url, notify):
         raise RuntimeError('Fonte diferente do vídeo autorizado.')
     notify('Consultando metadados e disponibilidade de Mais reproduzido...')
     result=run([sys.executable,'-m','yt_dlp','--skip-download','--dump-single-json',
-        '--ignore-config','--no-playlist','--max-filesize',('128M' if os.getenv('SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE') else '512M'),'--socket-timeout','18','--retries','2',url],stage='Consulta ao YouTube',timeout=120)
+        '--ignore-config','--no-playlist','--socket-timeout','18','--retries','2',url],stage='Consulta ao YouTube',timeout=120)
     try:
         info=json.loads(result.stdout)
     except ValueError as e:

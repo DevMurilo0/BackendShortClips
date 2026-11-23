@@ -101,7 +101,7 @@ def metadata_youtube(url, notify):
         raise RuntimeError('Fonte diferente do vídeo autorizado.')
     notify('Consultando metadados e disponibilidade de Mais reproduzido...')
     result=run([sys.executable,'-m','yt_dlp','--skip-download','--dump-single-json',
-        '--ignore-config','--no-playlist','--max-filesize',('128M' if os.getenv('SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE') else '512M'),'--socket-timeout','18','--retries','2',url],stage='Consulta ao YouTube',timeout=120)
+        '--ignore-config','--no-playlist','--socket-timeout','18','--retries','2',url],stage='Consulta ao YouTube',timeout=120)
     try:
         info=json.loads(result.stdout)
     except ValueError as e:
@@ -110,12 +110,18 @@ def metadata_youtube(url, notify):
         raise RuntimeError('Envie um vídeo individual acessível, não uma playlist.')
     if authorized:
         duration = info.get('duration')
-        if (not isinstance(duration, (int, float)) or not 30 <= duration <= 120
-                or info.get('is_live') or info.get('live_status') in ('is_live', 'is_upcoming')):
-            raise RuntimeError('Ensaio aceita vídeo gravado de 30 a 120 segundos.')
-        size = info.get('filesize') or info.get('filesize_approx')
-        if size and size > 128 * 1024**2:
-            raise RuntimeError('Fonte excede 128 MiB para o ensaio.')
+        # Metadata can describe the entire multi-hour original. Only a
+        # separately bounded bestaudio rendition and 30-second sections
+        # are downloaded by this worker.
+        if (isinstance(duration, bool) or not isinstance(duration, (int, float))
+                or not math.isfinite(duration) or not 30 <= duration <= 6*3600
+                or info.get('is_live') or info.get('live_status') in
+                ('is_live', 'is_upcoming', 'post_live')):
+            raise RuntimeError('Ensaio aceita vídeos gravados de 30 segundos a 6 horas.')
+        video_id = info.get('id')
+        if video_id and (not isinstance(video_id, str) or
+                         url.rsplit('/', 1)[-1] != video_id):
+            raise RuntimeError('Metadados não correspondem ao vídeo autorizado.')
     info['_shortforge_diagnostics']=result.stderr
     return info
 
@@ -146,7 +152,8 @@ def download_audio(url, folder, notify):
     notify('Baixando áudio para análise local...')
     run([sys.executable,'-m','yt_dlp','--ignore-config','--no-playlist','--max-filesize',('128M' if os.getenv('SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE') else '512M'),'--no-progress','--socket-timeout','20',
          '--retries','2','--fragment-retries','2','-f','bestaudio/best',
-         '-o',str((folder/'analise_audio.%(ext)s').resolve()),url],stage='Download do áudio',timeout=1800)
+         '-o',str((folder/'analise_audio.%(ext)s').resolve()),url],stage='Download do áudio',
+        timeout=240 if os.getenv('SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE') else 1800)
     p=_find_media(folder,'analise_audio')
     if not p: raise RuntimeError('Download não produziu áudio válido.')
     return p
@@ -214,7 +221,7 @@ def download_section(url:str, start:float, end:float, work:Path, notify:Callable
          '-f','bv*[height<=720]+ba/b[height<=720]/b',
          '--no-progress','-o',str((work/'original.%(ext)s').resolve()),url]
     try:
-        run(cmd,stage='Extração do trecho')
+        run(cmd,stage='Extração do trecho',timeout=240 if os.getenv('SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE') else 3600)
     except RuntimeError as e:
         # Não finge sucesso ou contorna medidas de acesso do YouTube.
         raise RuntimeError(f'Falha ao extrair o trecho do YouTube. Verifique se o vídeo está público, se o yt-dlp está atualizado e se o acesso é permitido. Detalhes: {e}') from e

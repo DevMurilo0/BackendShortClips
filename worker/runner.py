@@ -80,9 +80,13 @@ async def callback(job_id: str):
     bypass = os.environ.get("SHORTFORGE_VERCEL_PROTECTION_BYPASS", "")
     if bypass:
         host = parsed.hostname.lower()
-        if (os.getenv("SHORTFORGE_DEPLOY_ENV") != "preview"
-                or not host.startswith("backend-short-clips-")
-                or not host.endswith("-murilo15.vercel.app")):
+        deployment = os.getenv("SHORTFORGE_DEPLOY_ENV")
+        preview = (deployment == "preview" and
+                   host.startswith("backend-short-clips-") and
+                   host.endswith("-murilo15.vercel.app"))
+        production = (deployment == "production" and
+                      host == "backend-short-clips.vercel.app")
+        if not (preview or production):
             record("callback_configuration_rejected")
             return False
         headers["x-vercel-protection-bypass"] = bypass

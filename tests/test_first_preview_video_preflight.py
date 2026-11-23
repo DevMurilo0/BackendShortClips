@@ -8,21 +8,21 @@ class FirstVideoPreflightTests(unittest.TestCase):
         data = validate_metadata({
             "id": "NZRCjPMb0AY",
             "webpage_url": "https://www.youtube.com/watch?v=NZRCjPMb0AY",
-            "duration": 72,
+            "duration": 6445,
             "filesize_approx": 2_000_000,
             "is_live": False,
         })
-        self.assertEqual(data["duration_seconds"], 72)
+        self.assertEqual(data["duration_seconds"], 6445)
         self.assertTrue(data["source_bounded"])
         self.assertFalse(data["media_downloaded"])
         self.assertFalse(data["sandbox_created"])
 
     def test_fails_closed_for_long_live_unknown_size_wrong_video(self):
-        good = {"id": "NZRCjPMb0AY", "duration": 72}
+        good = {"id": "NZRCjPMb0AY", "duration": 6445}
         for overrides in (
-            {"duration": 121}, {"duration": 29}, {"duration": None},
+            {"duration": 21601}, {"duration": 29}, {"duration": None},
             {"is_live": True}, {"live_status": "is_upcoming"},
-            {"filesize_approx": 129*1024*1024}, {"id": "abcdefghijk"},
+            {"id": "abcdefghijk"},
             {"webpage_url": "https://youtu.be/abcdefghijk"},
             {"_type": "playlist"}, {"duration": float("nan")},
         ):

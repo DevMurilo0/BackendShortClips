@@ -127,6 +127,15 @@ def configured() -> bool:
             if not (test_source or youtube_source) or not preview_protection_bypass():
                 return False
             preview_callback_url()
+        if enabled() and os.getenv("VERCEL_ENV") == "production":
+            # Fail closed until Production deployment protection, private
+            # credentials and a single-monthly-run budget are confirmed.
+            if (os.getenv("SHORTFORGE_CLOUD_PRODUCTION_APPROVED") != "1"
+                    or os.getenv("SHORTFORGE_MAX_JOBS_MONTH") != "1"
+                    or not preview_protection_bypass()
+                    or os.getenv("SHORTFORGE_FRONTEND_ORIGIN") !=
+                       "https://short-clips-tan.vercel.app"):
+                return False
     except (RuntimeError, ValueError):
         return False
     user_key = os.getenv("SHORTFORGE_PUBLIC_ACCESS_KEY", "")
@@ -270,6 +279,10 @@ async def submit(payload: dict) -> dict:
     youtube_source = preview_youtube_source()
     controlled = bool(test_source or youtube_source)
     opts = validate_job(payload)
+    if os.getenv("VERCEL_ENV") == "production":
+        if (payload.get("rights_confirmed") is not True or opts["count"] > 3
+                or opts["resolution"] != 720 or opts["length"] > 45):
+            raise RequestRejected("Production privada: vídeo autorizado, até 3 Shorts e 720p.")
     if controlled:
         if (opts["url"] != (youtube_source or PREVIEW_SYNTHETIC_URL) or opts["count"] != 1
                 or opts["length"] != 30 or not opts.get("manual_box")):
@@ -322,7 +335,8 @@ async def submit(payload: dict) -> dict:
             name=job["sandbox_name"],
             image=os.getenv("SHORTFORGE_SANDBOX_IMAGE", "vercel/sandbox/python:3.14"),
             region="iad1",
-            execution_time_limit=timedelta(minutes=10 if controlled else SANDBOX_MAX_MINUTES),
+            execution_time_limit=timedelta(minutes=10 if controlled else
+                (20 if os.getenv("VERCEL_ENV") == "production" else SANDBOX_MAX_MINUTES)),
             resources=SandboxResources(vcpus=SANDBOX_VCPUS,
                                        memory=SANDBOX_MEMORY_MB),
             persistent=False,
@@ -349,6 +363,8 @@ async def submit(payload: dict) -> dict:
             env["SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE"] = youtube_source
         if controlled:
             env["SHORTFORGE_PUBLIC_API_URL"] = preview_callback_url()
+            env["SHORTFORGE_VERCEL_PROTECTION_BYPASS"] = preview_protection_bypass()
+        elif os.getenv("VERCEL_ENV") == "production":
             env["SHORTFORGE_VERCEL_PROTECTION_BYPASS"] = preview_protection_bypass()
         # create_command é detached: a Function responde sem esperar 5 Shorts.
         await box.create_command("python3", ["-c", BOOTSTRAP],

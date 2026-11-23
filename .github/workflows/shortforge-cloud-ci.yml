@@ -1,0 +1,31 @@
+name: ShortForge cloud backend CI
+on:
+  push:
+    branches: [feat/long-video-cloud-shortforge]
+  pull_request:
+    branches: [fix/preview-automation-bypass]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Python compiles
+        run: python -m compileall -q api worker tests scripts
+      - name: Install lightweight SDKs and test dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Offline unit tests (mock Vercel; no Sandbox)
+        run: python -m unittest discover -s tests -v
+      - name: Install private Blob signed download SDK
+        run: npm ci --omit=dev
+      - name: Node download authorization tests
+        run: npm test

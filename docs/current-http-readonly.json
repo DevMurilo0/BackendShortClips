@@ -1,0 +1,50 @@
+[
+  {
+    "url": "https://backend-short-clips.vercel.app/api/health",
+    "method": "GET",
+    "status": 200,
+    "origin": null,
+    "allow_origin": null,
+    "body": {
+      "ok": true,
+      "service": "BackendShortClips",
+      "mode": "gateway",
+      "ready": false,
+      "limits": {
+        "clips": 5,
+        "seconds": 45,
+        "resolution": 720,
+        "concurrency": 1
+      },
+      "reason": "Worker ainda não configurado; nenhuma tarefa é iniciada."
+    }
+  },
+  {
+    "url": "https://backend-short-clips.vercel.app/api/download",
+    "method": "GET",
+    "status": 401,
+    "origin": null,
+    "allow_origin": null
+  },
+  {
+    "url": "https://backend-short-clips.vercel.app/api/jobs/latest",
+    "method": "GET",
+    "status": 401,
+    "origin": null,
+    "allow_origin": null
+  },
+  {
+    "url": "https://backend-short-clips.vercel.app/api/jobs",
+    "method": "OPTIONS",
+    "status": 204,
+    "origin": "https://short-clips-tan.vercel.app",
+    "allow_origin": "https://short-clips-tan.vercel.app"
+  },
+  {
+    "url": "https://backend-short-clips.vercel.app/api/jobs",
+    "method": "OPTIONS",
+    "status": 403,
+    "origin": "https://untrusted.invalid",
+    "allow_origin": null
+  }
+]

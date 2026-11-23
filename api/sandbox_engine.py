@@ -14,7 +14,7 @@ import secrets
 from api.policy import (
     SANDBOX_VCPUS, SANDBOX_MEMORY_MB, SANDBOX_MAX_MINUTES,
     OUTPUT_TTL_HOURS, monthly_cap, period_key, expired, deletion_due,
-    validate_job, RequestRejected, approximate_usage,
+    validate_job, canonical_youtube, RequestRejected, approximate_usage,
 )
 
 STORE_ACCESS = "private"
@@ -64,14 +64,32 @@ def preview_synthetic_source() -> str | None:
     return pathname
 
 
+def preview_youtube_source() -> str | None:
+    """Operator attestation pins one authorized video; absent configuration stays closed."""
+    source = os.getenv("SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE", "")
+    if not source:
+        return None
+    if (os.getenv("VERCEL_ENV") != "preview" or not namespace_ready()
+            or os.getenv("SHORTFORGE_PREVIEW_RIGHTS_CONFIRMED") != "1"
+            or preview_synthetic_source()):
+        raise RuntimeError("Ensaio YouTube exige autorização e Preview isolado.")
+    return canonical_youtube(source)
+
+
 def preview_callback_url() -> str:
     """Pin callbacks to this team's exact Preview deployment, never Production."""
     from urllib.parse import urlsplit
     url = os.getenv("SHORTFORGE_PUBLIC_API_URL", "").rstrip("/")
+    deployment = os.getenv("VERCEL_URL", "")
+    if deployment:
+        actual = "https://" + deployment
+        if url and url != actual:
+            raise RuntimeError("Callback diferente do deployment atual.")
+        url = actual
     target = urlsplit(url)
     hostname = (target.hostname or "").lower()
     if (target.scheme != "https" or target.username or target.password
-            or target.query or target.fragment or target.path
+            or target.query or target.fragment or target.path or target.port not in (None, 443)
             or not hostname.startswith("backend-short-clips-")
             or not hostname.endswith("-murilo15.vercel.app")):
         raise RuntimeError("O callback do ensaio deve apontar para o deployment Preview exato.")
@@ -93,9 +111,10 @@ def namespace_ready() -> bool:
 def configured() -> bool:
     try:
         test_source = preview_synthetic_source()
-        # An active Preview must never fall back to 42-minute YouTube jobs.
+        youtube_source = preview_youtube_source()
+        # An active Preview must never fall back to unrestricted 42-minute jobs.
         if enabled() and os.getenv("VERCEL_ENV") == "preview":
-            if not test_source or not os.getenv("SHORTFORGE_VERCEL_PROTECTION_BYPASS"):
+            if not (test_source or youtube_source) or not os.getenv("SHORTFORGE_VERCEL_PROTECTION_BYPASS"):
                 return False
             preview_callback_url()
     except (RuntimeError, ValueError):
@@ -104,6 +123,9 @@ def configured() -> bool:
     worker_key = os.getenv("SHORTFORGE_WORKER_SECRET", "")
     return bool(enabled() and namespace_ready()
                 and os.getenv("BLOB_READ_WRITE_TOKEN")
+                and not any("[SENSITIVE]" in os.getenv(name, "") for name in (
+                    "BLOB_READ_WRITE_TOKEN", "SHORTFORGE_PUBLIC_ACCESS_KEY",
+                    "SHORTFORGE_WORKER_SECRET", "SHORTFORGE_VERCEL_PROTECTION_BYPASS"))
                 and len(user_key) >= 32 and len(worker_key) >= 32
                 and user_key != worker_key
                 and os.getenv("SHORTFORGE_FRONTEND_ORIGIN", "https://short-clips-tan.vercel.app"))
@@ -234,9 +256,11 @@ async def submit(payload: dict) -> dict:
     if not configured():
         raise RuntimeError("O Sandbox não foi habilitado ou não possui armazenamento/credenciais.")
     test_source = preview_synthetic_source()
+    youtube_source = preview_youtube_source()
+    controlled = bool(test_source or youtube_source)
     opts = validate_job(payload)
-    if test_source:
-        if (opts["url"] != PREVIEW_SYNTHETIC_URL or opts["count"] != 1
+    if controlled:
+        if (opts["url"] != (youtube_source or PREVIEW_SYNTHETIC_URL) or opts["count"] != 1
                 or opts["length"] != 30 or not opts.get("manual_box")):
             raise RequestRejected("Ensaio isolado: somente 1 Short de 30s com facecam manual.")
         preview_callback_url()
@@ -265,15 +289,15 @@ async def submit(payload: dict) -> dict:
     creation_attempted = False
     try:
         await _quota(month)  # Serialized by the global lock, including the last monthly slot.
-        if test_source:
-            # Create-only reservation: one paid synthetic run per isolated Preview namespace.
+        if controlled:
+            # Create-only reservation: one controlled run per isolated Preview namespace.
             try:
                 await _write_blob(f"{ROOT}/integration/once.json",
                                   {"id":job_id, "started_at":now}, overwrite=False)
             except Exception as error:
                 if (getattr(error, "status_code", None) in (409, 412)
                         or "already exists" in str(error).lower()):
-                    raise RequestRejected("Este namespace já consumiu seu ensaio sintético.") from None
+                    raise RequestRejected("Este namespace já consumiu seu ensaio controlado.") from None
                 raise
         await _write_blob(path, job)
         await _write_blob(LATEST, {"id":job_id,"month":month})
@@ -287,7 +311,7 @@ async def submit(payload: dict) -> dict:
             name=job["sandbox_name"],
             image=os.getenv("SHORTFORGE_SANDBOX_IMAGE", "vercel/sandbox/python:3.14"),
             region="iad1",
-            execution_time_limit=timedelta(minutes=10 if test_source else SANDBOX_MAX_MINUTES),
+            execution_time_limit=timedelta(minutes=10 if controlled else SANDBOX_MAX_MINUTES),
             resources=SandboxResources(vcpus=SANDBOX_VCPUS,
                                        memory=SANDBOX_MEMORY_MB),
             persistent=False,
@@ -310,6 +334,10 @@ async def submit(payload: dict) -> dict:
         }
         if test_source:
             env["SHORTFORGE_TEST_SOURCE_BLOB"] = test_source
+        if youtube_source:
+            env["SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE"] = youtube_source
+        if controlled:
+            env["SHORTFORGE_PUBLIC_API_URL"] = preview_callback_url()
             env["SHORTFORGE_VERCEL_PROTECTION_BYPASS"] = os.environ[
                 "SHORTFORGE_VERCEL_PROTECTION_BYPASS"]
         # create_command é detached: a Function responde sem esperar 5 Shorts.

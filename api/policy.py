@@ -42,6 +42,9 @@ def canonical_youtube(raw: str) -> str:
         raise RequestRejected("Endereço de vídeo inválido.") from None
     if p.scheme != "https" or p.username or p.password or port not in (None, 443):
         raise RequestRejected("Use um endereço HTTPS do YouTube.")
+    query = parse_qs(p.query, keep_blank_values=True)
+    if "list" in query or "index" in query or len(query.get("v", [])) > 1:
+        raise RequestRejected("Envie somente um vídeo, sem playlist.")
     host = (p.hostname or "").lower()
     if host == "youtu.be":
         video_id = p.path.strip("/")

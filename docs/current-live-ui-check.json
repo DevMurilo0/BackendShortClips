@@ -1,0 +1,21 @@
+{
+  "mode": "current_published_frontend_read_only",
+  "viewports": [
+    {
+      "width": 390,
+      "horizontal_overflow": false,
+      "submit_disabled": true,
+      "backend_panel_visible": true
+    },
+    {
+      "width": 1280,
+      "horizontal_overflow": false,
+      "submit_disabled": true,
+      "backend_panel_visible": true
+    }
+  ],
+  "errors": [],
+  "posts": [],
+  "disabled_backend_notice": "Conexão não estabelecida: O servidor existe, mas seu worker de vídeos ainda não está configurado.",
+  "submit_stays_disabled": true
+}

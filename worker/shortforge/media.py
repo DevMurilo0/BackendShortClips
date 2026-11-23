@@ -90,15 +90,32 @@ def ffprobe(path: Path) -> dict:
 
 
 def metadata_youtube(url, notify):
+    from urllib.parse import urlsplit
+    # Never pass arbitrary origins to yt-dlp, including from a forged manifest.
+    from re import fullmatch
+    parsed = urlsplit(url)
+    if parsed.scheme != 'https' or parsed.netloc != 'youtu.be' or not fullmatch(r'/[A-Za-z0-9_-]{11}', parsed.path) or parsed.query or parsed.fragment:
+        raise RuntimeError('Origem YouTube canônica obrigatória.')
+    authorized = os.getenv('SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE', '')
+    if authorized and url != authorized:
+        raise RuntimeError('Fonte diferente do vídeo autorizado.')
     notify('Consultando metadados e disponibilidade de Mais reproduzido...')
     result=run([sys.executable,'-m','yt_dlp','--skip-download','--dump-single-json',
-        '--ignore-config','--no-playlist','--max-filesize','512M','--socket-timeout','18','--retries','2',url],stage='Consulta ao YouTube',timeout=120)
+        '--ignore-config','--no-playlist','--max-filesize',('128M' if os.getenv('SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE') else '512M'),'--socket-timeout','18','--retries','2',url],stage='Consulta ao YouTube',timeout=120)
     try:
         info=json.loads(result.stdout)
     except ValueError as e:
         raise RuntimeError('O YouTube não retornou metadados válidos. '+result.stderr[-2000:]) from e
     if not info or info.get('_type')=='playlist':
         raise RuntimeError('Envie um vídeo individual acessível, não uma playlist.')
+    if authorized:
+        duration = info.get('duration')
+        if (not isinstance(duration, (int, float)) or not 30 <= duration <= 120
+                or info.get('is_live') or info.get('live_status') in ('is_live', 'is_upcoming')):
+            raise RuntimeError('Ensaio aceita vídeo gravado de 30 a 120 segundos.')
+        size = info.get('filesize') or info.get('filesize_approx')
+        if size and size > 128 * 1024**2:
+            raise RuntimeError('Fonte excede 128 MiB para o ensaio.')
     info['_shortforge_diagnostics']=result.stderr
     return info
 
@@ -127,7 +144,7 @@ def _find_media(folder:Path, stem:str):
 
 def download_audio(url, folder, notify):
     notify('Baixando áudio para análise local...')
-    run([sys.executable,'-m','yt_dlp','--ignore-config','--no-playlist','--max-filesize','512M','--no-progress','--socket-timeout','20',
+    run([sys.executable,'-m','yt_dlp','--ignore-config','--no-playlist','--max-filesize',('128M' if os.getenv('SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE') else '512M'),'--no-progress','--socket-timeout','20',
          '--retries','2','--fragment-retries','2','-f','bestaudio/best',
          '-o',str((folder/'analise_audio.%(ext)s').resolve()),url],stage='Download do áudio',timeout=1800)
     p=_find_media(folder,'analise_audio')
@@ -190,7 +207,7 @@ def download_section(url:str, start:float, end:float, work:Path, notify:Callable
             return desired
         raise RuntimeError('Trecho existente tem duração incompatível; preserve-o e use outra tarefa.')
     notify(f'Baixando trecho {timestamp(start)}–{timestamp(end)} do YouTube...')
-    cmd=[sys.executable,'-m','yt_dlp','--ignore-config','--no-playlist','--max-filesize','512M','--socket-timeout','20','--retries','2',
+    cmd=[sys.executable,'-m','yt_dlp','--ignore-config','--no-playlist','--max-filesize',('128M' if os.getenv('SHORTFORGE_PREVIEW_AUTHORIZED_YOUTUBE') else '512M'),'--socket-timeout','20','--retries','2',
          '--download-sections',f'*{timestamp(start)}-{timestamp(end)}',
          '--force-keyframes-at-cuts','--merge-output-format','mp4',
          '--downloader-args','ffmpeg_o:-c:v libx264 -preset veryfast -threads 2',
